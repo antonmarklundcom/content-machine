@@ -1,3 +1,4 @@
+import { hasMysqlError } from "./mysql-error";
 import {
   deleteReturning,
   insertIfAbsent,
@@ -447,7 +448,8 @@ test("batch uncertainty transfer is atomic and idempotent", async () => {
   try {
     await assert.rejects(
       retainBatchUncertainty("safety-batch-uncertain", "synthetic response lost"),
-      /synthetic batch ledger failure/i,
+      (error: unknown) =>
+        hasMysqlError(error, "ER_SIGNAL_EXCEPTION", /synthetic batch ledger failure/i),
     );
     const [unchanged] = await db
       .select()
@@ -503,7 +505,9 @@ test("analysis and billing roll back together and a collection retry records one
     costUsd: 0.5,
   };
   try {
-    await assert.rejects(insertAnalysis(input), /synthetic spend ledger failure/i);
+    await assert.rejects(insertAnalysis(input), (error: unknown) =>
+      hasMysqlError(error, "ER_SIGNAL_EXCEPTION", /synthetic spend ledger failure/i),
+    );
     assert.equal(
       (await db.select().from(schema.analyses).where(eq(schema.analyses.videoId, video.id))).length,
       0,

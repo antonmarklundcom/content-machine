@@ -1,3 +1,4 @@
+import { hasMysqlError } from "./mysql-error";
 import assert from "node:assert/strict";
 import { after, beforeEach, test } from "node:test";
 
@@ -64,7 +65,7 @@ test("family facts are unique per external key and language; hand-made facts rem
       topic: "visa",
       claim: "Duplicate",
     }),
-    /facts_family_key_language_idx/,
+    (error: unknown) => hasMysqlError(error, "ER_DUP_ENTRY", /facts_family_key_language_idx/),
   );
 
   await db.insert(schema.facts).values([
