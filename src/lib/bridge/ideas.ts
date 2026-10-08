@@ -100,11 +100,11 @@ export async function updateIdea(id: number, update: IdeaUpdate): Promise<Idea |
   if (update.angle !== undefined) set.angle = update.angle;
   if (update.draftCopy !== undefined) set.draftCopy = update.draftCopy;
   if (update.status !== undefined) {
-    // MariaDB SET assignments run left-to-right: read the old status before writing it.
+    // postedAt is cleared on every non-posted status. COALESCE stamps entry
+    // and preserves repeats without reading status after MariaDB changes it.
+    // Drizzle orders SET assignments by schema columns, not patch key order.
     set.postedAt =
-      update.status === "posted"
-        ? sql`case when ${ideas.status} = 'posted' then ${ideas.postedAt} else current_timestamp(3) end`
-        : null;
+      update.status === "posted" ? sql`coalesce(${ideas.postedAt}, current_timestamp(3))` : null;
     set.status = update.status;
   }
   if (Object.keys(set).length === 0) return getIdea(id);

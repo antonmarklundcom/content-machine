@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -11,6 +12,7 @@ import { db, schema } from "@/db";
 import { GET as renderStatus } from "@/app/api/video/renders/[id]/route";
 import { createScript } from "@/lib/bridge/scripts";
 import { registerFile } from "@/lib/media/register";
+import { sniffMime } from "@/lib/media/sniff";
 import { validateScriptBody } from "@/lib/scripts/contract";
 import { sampleScriptBody } from "@/lib/scripts/fixture";
 import { renderVideo, type RenderRequest, type RenderScene } from "@/lib/video";
@@ -218,10 +220,33 @@ async function checkRender(
     .where(inArray(schema.assets.id, [row.outputAssetId!, row.srtAssetId!, row.vttAssetId!]));
   const byId = new Map(rows.map((a) => [a.id, a]));
   assert.equal(byId.get(row.outputAssetId!)?.kind, "video");
-  assert.equal(byId.get(row.outputAssetId!)?.localPath, result.videoPath);
+  const video = byId.get(row.outputAssetId!);
+  assert.ok(video?.localPath);
+  const videoBytes = readFileSync(mp4);
+  const videoSha = createHash("sha256").update(videoBytes).digest("hex");
+  assert.equal(video.localPath, `_originals/${videoSha.slice(0, 2)}/${videoSha}.mp4`);
+  assert.equal(video.sha256, videoSha);
+  assert.equal(video.bytes, videoBytes.length);
+  assert.equal(video.sourceRef, `render:${row.id}`);
+  assert.deepEqual(sniffMime(videoBytes), { kind: "video", mime: "video/mp4", ext: "mp4" });
+  assert.deepEqual(readFileSync(path.join(root, ...video.localPath.split("/"))), videoBytes);
   assert.equal(byId.get(row.srtAssetId!)?.mime, "application/x-subrip");
   assert.equal(byId.get(row.vttAssetId!)?.mime, "text/vtt");
   assert.equal(byId.get(row.vttAssetId!)?.localPath, result.vttPath);
+  assert.equal(byId.get(row.srtAssetId!)?.localPath, result.srtPath);
+  for (const [assetId, file] of [
+    [row.srtAssetId!, result.srtPath],
+    [row.vttAssetId!, result.vttPath],
+  ] as const) {
+    const asset = byId.get(assetId);
+    assert.ok(asset);
+    const bytes = readFileSync(path.join(root, ...file.split("/")));
+    assert.equal(asset.kind, "document");
+    assert.equal(asset.sha256, createHash("sha256").update(bytes).digest("hex"));
+    assert.equal(asset.bytes, bytes.length);
+    assert.equal(asset.sourceRef, `render:${row.id}`);
+    assert.ok(asset.tags.includes("captions"));
+  }
   return row;
 }
 

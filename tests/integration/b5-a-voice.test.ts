@@ -1,6 +1,7 @@
 import { insertReturning } from "@/db/mutations";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
@@ -9,6 +10,8 @@ import { after, afterEach, beforeEach, test } from "node:test";
 import { eq, inArray } from "drizzle-orm";
 
 import { db, schema } from "@/db";
+import { sniffMime } from "@/lib/media/sniff";
+import { parseWav } from "@/lib/voice/wav";
 import {
   previewStoryVoiceAction,
   queueStoryVoiceAction,
@@ -184,6 +187,26 @@ const line = (over: Partial<VoiceLineRequest> = {}): VoiceLineRequest => ({
 const rowsOf = (ids: number[]) =>
   db.select().from(schema.narrations).where(inArray(schema.narrations.id, ids));
 
+function checkImmutableAudioAsset(
+  asset: typeof schema.assets.$inferSelect | undefined,
+  finalPath: string,
+  mime: "audio/wav" | "audio/mpeg",
+): Buffer {
+  assert.ok(asset?.localPath);
+  const bytes = readFileSync(path.join(media, ...finalPath.split("/")));
+  const sha = createHash("sha256").update(bytes).digest("hex");
+  const extension = mime === "audio/wav" ? "wav" : "mp3";
+  assert.equal(asset.kind, "audio");
+  assert.equal(asset.mime, mime);
+  assert.equal(sniffMime(bytes)?.mime, mime);
+  assert.equal(asset.sha256, sha);
+  assert.equal(asset.localPath, `_originals/${sha.slice(0, 2)}/${sha}.${extension}`);
+  assert.equal(asset.bytes, bytes.length);
+  assert.ok(asset.tags.includes("voice") && asset.tags.includes("higgsfield"));
+  assert.deepEqual(readFileSync(path.join(media, ...asset.localPath.split("/"))), bytes);
+  return bytes;
+}
+
 test("the manifest: narrate()'s refusals, never Guaraní, pronunciations, estimates", async () => {
   await db.insert(schema.pronunciations).values({
     term: "Ypacaraí",
@@ -293,9 +316,20 @@ test(
         .select()
         .from(schema.assets)
         .where(inArray(schema.assets.id, [r.masterAssetId!, r.playbackAssetId!]));
-      const paths = assets.map((a) => a.localPath).sort();
+      assert.equal(assets.length, 2);
+      assert.equal(r.higgsfieldJobId, job.id);
       const folder = narrationFolder(r);
-      assert.deepEqual(paths, [`${folder}/take-${r.id}.mp3`, `${folder}/take-${r.id}.wav`]);
+      const master = assets.find((asset) => asset.id === r.masterAssetId);
+      const playback = assets.find((asset) => asset.id === r.playbackAssetId);
+      const masterBytes = checkImmutableAudioAsset(
+        master,
+        `${folder}/take-${r.id}.wav`,
+        "audio/wav",
+      );
+      checkImmutableAudioAsset(playback, `${folder}/take-${r.id}.mp3`, "audio/mpeg");
+      const wavInfo = parseWav(masterBytes);
+      assert.ok(wavInfo);
+      assert.ok(Math.abs(wavInfo.durationMs - r.durationMs!) < 40);
       assert.equal(
         existsSync(path.join(media, ...`${folder}/take-${r.id}.hf.mp3`.split("/"))),
         false,
@@ -465,7 +499,26 @@ test(
       .select()
       .from(schema.assets)
       .where(eq(schema.assets.id, done.masterAssetId!));
-    assert.ok(master.localPath?.endsWith(`take-${ids[0]}.wav`));
+    const folder = narrationFolder(done);
+    const masterBytes = checkImmutableAudioAsset(
+      master,
+      `${folder}/take-${done.id}.wav`,
+      "audio/wav",
+    );
+    const [playback] = await db
+      .select()
+      .from(schema.assets)
+      .where(eq(schema.assets.id, done.playbackAssetId!));
+    checkImmutableAudioAsset(playback, `${folder}/take-${done.id}.mp3`, "audio/mpeg");
+    const wavInfo = parseWav(masterBytes);
+    assert.ok(wavInfo);
+    assert.ok(Math.abs(wavInfo.durationMs - done.durationMs!) < 40);
+    assert.equal(master.sourceRef, `narration:${done.id}`);
+    assert.equal(
+      existsSync(out),
+      false,
+      "raw provider download is consumed only after the take is stored",
+    );
     assert.ok(master.tags.includes("higgsfield"));
 
     assert.deepEqual(await finalizeHiggsfieldVoiceJob(jobRow.id, null), {

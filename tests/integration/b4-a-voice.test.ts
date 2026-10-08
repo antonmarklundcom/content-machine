@@ -1,12 +1,14 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, afterEach, beforeEach, test } from "node:test";
 import { eq } from "drizzle-orm";
 
 import { db, schema } from "@/db";
+import { sniffMime } from "@/lib/media/sniff";
 import {
   importRecording,
   narrate,
@@ -348,7 +350,22 @@ test(
       listed.map((t) => t.id),
       [b.narrationId, a.narrationId],
     );
-    assert.equal(listed[0].playbackPath, b.playbackPath);
+    const [playback] = await db
+      .select()
+      .from(schema.assets)
+      .where(eq(schema.assets.id, reviewed.playbackAssetId!));
+    assert.ok(playback?.localPath);
+    const sourceBytes = readFileSync(path.join(root, ...b.playbackPath.split("/")));
+    const sha = createHash("sha256").update(sourceBytes).digest("hex");
+    assert.equal(playback.sha256, sha);
+    assert.equal(playback.localPath, `_originals/${sha.slice(0, 2)}/${sha}.mp3`);
+    assert.equal(playback.bytes, sourceBytes.length);
+    assert.equal(playback.kind, "audio");
+    assert.equal(playback.mime, "audio/mpeg");
+    assert.equal(sniffMime(sourceBytes)?.mime, playback.mime);
+    assert.deepEqual(readFileSync(path.join(root, ...playback.localPath.split("/"))), sourceBytes);
+    assert.equal(listed[0].playbackAssetId, reviewed.playbackAssetId);
+    assert.equal(listed[0].playbackPath, playback.localPath);
     assert.equal(listed[0].profileName, "Tania");
   },
 );

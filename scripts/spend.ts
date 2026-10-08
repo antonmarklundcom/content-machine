@@ -1,7 +1,7 @@
 /**
  * Spend report and cap check — the database-backed half of PR-07's done-when.
  *
- *   export DATABASE_URL='postgres://...'
+ *   export DATABASE_URL='mysql://...'
  *   npx tsx scripts/spend.ts                 # month-to-date vs cap
  *   npx tsx scripts/spend.ts --test-cap      # prove the cap trips, then undo it
  *

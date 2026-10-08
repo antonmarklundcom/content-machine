@@ -1,7 +1,7 @@
 /**
  * PR-05 done-when: "a playlist ingests, mixed available/none".
  *
- *   export DATABASE_URL='postgres://...'
+ *   export DATABASE_URL='mysql://...'
  *   export YOUTUBE_API_KEY='...'
  *   npx tsx scripts/ingest.ts 'https://www.youtube.com/playlist?list=PL...' --limit 20
  *

@@ -45,7 +45,10 @@ jobs:
       - run: npm ci
       - name: Install synthetic media test tools
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+        timeout-minutes: 5
+        run: |
+          sudo apt-get update -o Acquire::Retries=1 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15
+          sudo apt-get install -y ffmpeg -o Acquire::Retries=1 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15
       - run: npm run typecheck
       - run: npm run typecheck:worker
       - run: npm run lint

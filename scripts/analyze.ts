@@ -1,7 +1,7 @@
 /**
  * PR-06 done-when: "one video produces a stored analysis".
  *
- *   export DATABASE_URL='postgres://...'
+ *   export DATABASE_URL='mysql://...'
  *   export GEMINI_API_KEY='...'
  *   npx tsx scripts/analyze.ts <youtube-url-or-id>   # one video
  *   npx tsx scripts/analyze.ts --pending [--limit N] # everything not yet analysed

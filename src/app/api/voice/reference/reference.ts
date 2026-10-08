@@ -78,7 +78,7 @@ export async function setChatterboxReference(id: number, relPath: string): Promi
     voiceProfiles,
     {
       settings: sql`json_set(coalesce(${voiceProfiles.settings}, json_object()),
-        '$.chatterbox', json_merge_patch(json_object(), coalesce(json_extract(${voiceProfiles.settings}, '$.chatterbox'), json_object()), json_object('referencePath', ${relPath})))`,
+        '$.chatterbox', json_merge_patch(json_object('mode', 'local'), coalesce(json_extract(${voiceProfiles.settings}, '$.chatterbox'), json_object()), json_object('referencePath', ${relPath})))`,
       updatedAt: new Date(),
     },
     eq(voiceProfiles.id, id),

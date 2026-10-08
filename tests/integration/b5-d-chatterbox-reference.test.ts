@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:f
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, afterEach, beforeEach, test } from "node:test";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { GET, POST } from "@/app/api/voice/reference/[profileId]/route";
@@ -159,6 +159,29 @@ test("upload: a profile without its own settings gets mode local", { skip }, asy
     .from(schema.voiceProfiles)
     .where(eq(schema.voiceProfiles.id, p.id));
   assert.deepEqual(row.settings, { chatterbox: { mode: "local", referencePath: rel } });
+
+  // Legacy partial JSON can have Chatterbox options without an explicit mode.
+  await db
+    .update(schema.voiceProfiles)
+    .set({
+      settings: sql`json_object('model', 'keep-me', 'chatterbox', json_object('exaggeration', 0.8, 'cfgWeight', 0))`,
+    })
+    .where(eq(schema.voiceProfiles.id, p.id));
+  const again = await callRoute(
+    (r) => POST(r, ctx(p.id)),
+    upload(p.id, owner.cookie, wavBlob(8_000)),
+  );
+  assert.equal(again.status, 201, await again.clone().text());
+  const { path: nextPath } = (await again.json()) as { path: string };
+  const [updated] = await db
+    .select()
+    .from(schema.voiceProfiles)
+    .where(eq(schema.voiceProfiles.id, p.id));
+  assert.deepEqual(updated.settings, {
+    model: "keep-me",
+    chatterbox: { mode: "local", exaggeration: 0.8, cfgWeight: 0, referencePath: nextPath },
+  });
+  assert.ok(existsSync(path.join(root, rel)), "the previous reference sample is preserved");
 });
 
 test("upload refusals: consent, not audio, too short, too big, unknown profile", async () => {

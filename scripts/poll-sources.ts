@@ -3,7 +3,7 @@
  * captions, and submits the analysis work as a Batch API job (PLAN.md §1.2 —
  * nobody is waiting on this, so accept latency for a flat 50% discount).
  *
- *   export DATABASE_URL='postgres://...' YOUTUBE_API_KEY='...' GEMINI_API_KEY='...'
+ *   export DATABASE_URL='mysql://...' YOUTUBE_API_KEY='...' GEMINI_API_KEY='...'
  *   npx tsx scripts/poll-sources.ts
  *
  * The logic lives in src/lib/poll.ts so that /api/cron/poll — which is what

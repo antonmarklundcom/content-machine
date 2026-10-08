@@ -1,6 +1,7 @@
 import { insertReturning } from "@/db/mutations";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -8,6 +9,8 @@ import { after, afterEach, beforeEach, test } from "node:test";
 import sharp from "sharp";
 
 import { db, schema } from "@/db";
+import { sniffMime } from "@/lib/media/sniff";
+import { parseWav } from "@/lib/voice/wav";
 import { getScene, getStory, listStoryTakes } from "@/lib/stories/data";
 import { EXPORT_MANIFEST, exportToCuentos, type ExportManifest } from "@/lib/stories/export";
 import { importStories } from "@/lib/stories/import";
@@ -15,6 +18,7 @@ import { readSceneMeta } from "@/lib/stories/meta";
 import { sceneReadiness } from "@/lib/stories/readiness";
 import {
   approveSceneText,
+  buildSceneAudio,
   approveStoryLanguage,
   LINE_GAP_MS,
   narrateScene,
@@ -192,8 +196,12 @@ test(
     const r = await narrateScene({ slug: SLUG, sceneRef: "S02", lang: "es" }, deps);
     assert.ok(r.audio, `scene audio built (${r.notes.join("; ")})`);
     const audio = r.audio!;
-    assert.equal(audio.wavPath, `stories/${SLUG}/audio/es/S02.wav`);
-    assert.equal(audio.mp3Path, `stories/${SLUG}/audio/es/S02.mp3`);
+    assert.equal(path.posix.dirname(audio.wavPath), `stories/${SLUG}/audio/es`);
+    assert.match(
+      path.posix.basename(audio.wavPath),
+      /^S02-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.wav$/,
+    );
+    assert.equal(audio.mp3Path, audio.wavPath.replace(/\.wav$/, ".mp3"));
     assert.ok(existsSync(path.join(media, audio.wavPath)));
     assert.ok(existsSync(path.join(media, audio.mp3Path!)));
     const d1 = fakeDurationMs("—¿Vos podés saltar tan alto?");
@@ -207,11 +215,44 @@ test(
       Math.abs(second.startMs - (d1 + LINE_GAP_MS)) < 40,
       "line 2 timings start after line 1 + gap",
     );
-    const [asset] = await db.select().from(schema.assets);
-    assert.ok(asset);
+    assert.deepEqual(
+      audio.takeIds,
+      r.takes.map((take) => take.result.narrationId),
+    );
+    const assets = (await db.select().from(schema.assets)).filter((asset) =>
+      asset.tags.includes("scene-audio"),
+    );
+    assert.equal(assets.length, 2, "both joined scene formats are registered");
+    const wavBytes = readFileSync(path.join(media, ...audio.wavPath.split("/")));
+    const mp3Bytes = readFileSync(path.join(media, ...audio.mp3Path!.split("/")));
+    const wavInfo = parseWav(wavBytes);
+    assert.ok(wavInfo);
+    assert.ok(Math.abs(wavInfo.durationMs - audio.durationMs) < 40);
+    for (const [bytes, extension, mime] of [
+      [wavBytes, "wav", "audio/wav"],
+      [mp3Bytes, "mp3", "audio/mpeg"],
+    ] as const) {
+      const sha = createHash("sha256").update(bytes).digest("hex");
+      const asset = assets.find((candidate) => candidate.sha256 === sha);
+      assert.ok(asset?.localPath);
+      assert.equal(asset.kind, "audio");
+      assert.equal(asset.mime, mime);
+      assert.equal(sniffMime(bytes)?.mime, mime);
+      assert.equal(asset.bytes, bytes.length);
+      assert.equal(asset.localPath, `_originals/${sha.slice(0, 2)}/${sha}.${extension}`);
+      assert.equal(asset.sourceRef, `story:${SLUG}#S02`);
+      assert.deepEqual(readFileSync(path.join(media, ...asset.localPath.split("/"))), bytes);
+    }
     const stored = readSceneMeta((await getScene((await getStory(SLUG))!.id, "S02"))!.notes).audio
       ?.es;
-    assert.deepEqual(stored?.takeIds, audio.takeIds);
+    assert.deepEqual(stored, audio);
+
+    const rebuilt = await buildSceneAudio(SLUG, "S02", "es");
+    assert.notEqual(rebuilt.wavPath, audio.wavPath);
+    assert.notEqual(rebuilt.mp3Path, audio.mp3Path);
+    assert.deepEqual(rebuilt.takeIds, audio.takeIds);
+    assert.deepEqual(readFileSync(path.join(media, ...audio.wavPath.split("/"))), wavBytes);
+    assert.deepEqual(readFileSync(path.join(media, ...audio.mp3Path!.split("/"))), mp3Bytes);
   },
 );
 

@@ -2,7 +2,7 @@ import { upsertReturning } from "@/db/mutations";
 /**
  * PR-03 seed for the YouTube tool's `users` table (owner/employee login).
  *
- *   export DATABASE_URL='postgres://user:pass@host/dbname'
+ *   export DATABASE_URL='mysql://user:pass@host/dbname'
  *   export ADMIN_EMAIL='you@example.com'
  *   export ADMIN_PASSWORD='...'          # optional; sets/updates the login password
  *   npx tsx scripts/seed-yt-owner.ts

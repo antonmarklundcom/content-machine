@@ -111,14 +111,29 @@ try {
       `Standalone login form did not load without database credentials (status ${login.status}).`,
     );
   }
-  const privateAsset = await fetch(`${base}/api/media/asset/1`);
-  if (privateAsset.status !== 401) {
+  // Middleware redirects browser/private routes to login. Do not follow it
+  // and mistake the public login's 200 for a successful private-media response.
+  const privateAsset = await fetch(`${base}/api/media/asset/1`, { redirect: "manual" });
+  const location = privateAsset.headers.get("location");
+  const redirectUrl = location === null ? null : new URL(location, base);
+  // NextURL normalizes 127.0.0.1 to localhost. Accept only that loopback
+  // alias on this exact synthetic server port and the fixed login path.
+  const loginRedirect =
+    privateAsset.status === 307 &&
+    redirectUrl !== null &&
+    redirectUrl.protocol === "http:" &&
+    ["127.0.0.1", "localhost"].includes(redirectUrl.hostname) &&
+    redirectUrl.port === String(port) &&
+    redirectUrl.pathname === "/youtube/login" &&
+    redirectUrl.search === "" &&
+    redirectUrl.hash === "";
+  if (privateAsset.status !== 401 && !loginRedirect) {
     throw new Error(
-      `Unauthenticated local asset request should fail with 401; got ${privateAsset.status}.`,
+      `Unauthenticated media must return 401 or redirect only to local login; got ${privateAsset.status} (location ${location ?? "none"}).`,
     );
   }
   console.log(
-    "Validated standalone mysql2 closure, static asset serving, login form, and private-media 401 without DATABASE_URL.",
+    "Validated standalone mysql2 closure, static asset serving, login form, and private-media denial without DATABASE_URL.",
   );
 } finally {
   child.kill("SIGTERM");

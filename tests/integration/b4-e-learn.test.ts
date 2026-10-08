@@ -38,6 +38,7 @@ import {
 } from "../../workers/telegram-capture/src/handler";
 
 import { resetTables, teardown } from "./setup";
+import { workerQueryFromPool } from "./worker-db";
 
 /**
  * Phase E (build 4 §3.E): processLearnClip with the model behind a seam and
@@ -410,6 +411,7 @@ test("the nudge picks one open item, sends it, and rotates past it next time", a
 });
 
 test("the Worker's learn SQL runs on real MariaDB: /done, candidates, nudge mark", async () => {
+  const workerQuery = workerQueryFromPool(pool);
   const clip = await addClip({ url: "https://x.test/w", title: "W", learnCategory: "other" });
   const inspo = await addClip({ url: "https://x.test/i", purpose: "inspo" });
   const env = { TELEGRAM_WEBHOOK_SECRET: "s", TELEGRAM_ALLOWED_CHAT_IDS: "1" };
@@ -420,27 +422,27 @@ test("the Worker's learn SQL runs on real MariaDB: /done, candidates, nudge mark
       body: JSON.stringify({ message: { message_id: 1, chat: { id: 1 }, text } }),
     });
 
-  const candidates = await mysqlQuery(NUDGE_CANDIDATES_SQL, []);
+  const candidates = await workerQuery(NUDGE_CANDIDATES_SQL, []);
   assert.deepEqual(
     candidates.map((r) => Number(r.id)),
     [clip.id],
   );
-  await mysqlQuery(NUDGE_MARK_SQL, [`learn-nudged:${clip.id}`]);
-  await mysqlQuery(NUDGE_MARK_SQL, [`learn-nudged:${clip.id}`]);
-  const [marked] = await mysqlQuery(NUDGE_CANDIDATES_SQL, []);
+  await workerQuery(NUDGE_MARK_SQL, [`learn-nudged:${clip.id}`]);
+  await workerQuery(NUDGE_MARK_SQL, [`learn-nudged:${clip.id}`]);
+  const [marked] = await workerQuery(NUDGE_CANDIDATES_SQL, []);
   const lastNudgedAt = new Date(String(marked!.last_nudged_at));
   assert.ok(
     Number.isFinite(lastNudgedAt.getTime()),
     "MariaDB's dateStrings value is a valid timestamp",
   );
 
-  const res = await handleWebhook(post(`/done ${clip.id}`), env, mysqlQuery);
+  const res = await handleWebhook(post(`/done ${clip.id}`), env, workerQuery);
   assert.match(((await res.json()) as { text: string }).text, /Marked "W" implemented/);
   assert.ok((await getClip(clip.id)).implementedAt);
-  assert.equal((await mysqlQuery(NUDGE_CANDIDATES_SQL, [])).length, 0);
+  assert.equal((await workerQuery(NUDGE_CANDIDATES_SQL, [])).length, 0);
 
   // Not a learn clip: untouched.
-  assert.equal((await mysqlQuery(LEARN_DONE_SQL, [inspo.id])).length, 0);
+  assert.equal((await workerQuery(LEARN_DONE_SQL, [inspo.id])).length, 0);
   assert.equal((await getClip(inspo.id)).implementedAt, null);
 });
 
