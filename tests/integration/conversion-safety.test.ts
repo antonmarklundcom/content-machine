@@ -307,7 +307,10 @@ test("verified late billing replaces an uncertain estimate exactly once", async 
   await spendStatus();
   finishProvider({ usage: { inputTokens: 10 } });
   await result;
-  const [settled] = await db.select().from(schema.spendHolds).where(eq(schema.spendHolds.id, live.id));
+  const [settled] = await db
+    .select()
+    .from(schema.spendHolds)
+    .where(eq(schema.spendHolds.id, live.id));
   assert.equal(settled.status, "released");
   assert.equal(Number(settled.actualUsd), 1.25);
   assert.equal(Number(settled.uncertainUsd), 0);
@@ -317,7 +320,7 @@ test("verified late billing replaces an uncertain estimate exactly once", async 
   assert.equal(await monthToDateUsd(), 1.25, "repeating verified release does not subtract twice");
 });
 
-test("a partially billed concurrent attempt retains only its unknown remainder", async () => {
+test("a partially billed concurrent attempt retains its full estimate while any dispatch is unknown", async () => {
   await withSpendCap(4, async () => {
     await withSpendAttempt(async () => {
       await dispatchSpend(async () => ({ accepted: true }));
@@ -330,8 +333,12 @@ test("a partially billed concurrent attempt retains only its unknown remainder",
   });
   const [uncertain] = await listUncertainSpendHolds();
   assert.equal(Number(uncertain.settledUsd), 1.25);
-  assert.equal(Number(uncertain.uncertainUsd), 2.75);
-  assert.equal((await spendStatus()).projectedUsd, 4);
+  assert.equal(Number(uncertain.uncertainUsd), 4);
+  assert.equal(
+    (await spendStatus()).projectedUsd,
+    5.25,
+    "known billing stays visible while the full ambiguous estimate remains reserved",
+  );
 });
 
 test("an accepted batch whose durable ledger write fails stays uncertain", async () => {
@@ -346,7 +353,7 @@ test("an accepted batch whose durable ledger write fails stays uncertain", async
   assert.equal((await spendStatus()).projectedUsd, 2);
 });
 
-test("late finally cannot release an expired hold after another call marked it uncertain", async () => {
+test("a successful pre-dispatch run can release its expired hold on verified completion", async () => {
   let finish!: () => void;
   let entered!: () => void;
   const gate = new Promise<void>((resolve) => (finish = resolve));
@@ -364,11 +371,12 @@ test("late finally cannot release an expired hold after another call marked it u
   assert.equal((await spendStatus()).projectedUsd, 2);
   finish();
   await work;
-  const [late] = await db
-    .select()
-    .from(schema.spendHolds)
-    .where(eq(schema.spendHolds.id, hold.id));
-  assert.equal(late.status, "released", "successful work with no dispatch verifies that nothing was paid");
+  const [late] = await db.select().from(schema.spendHolds).where(eq(schema.spendHolds.id, hold.id));
+  assert.equal(
+    late.status,
+    "released",
+    "successful work with no dispatch verifies that nothing was paid",
+  );
   assert.equal((await spendStatus()).projectedUsd, 0);
 });
 
@@ -393,7 +401,37 @@ test("batch uncertainty transfer is atomic and idempotent", async () => {
     model: "gemini-3.1-flash-lite",
     estimatedUsd: "2.500000",
   });
-  assert.equal(await retainBatchUncertainty("safety-batch-uncertain", "synthetic response lost"), 2.5);
+  const trigger = `safety_batch_failure_${process.pid}_${Date.now()}`;
+  await recoveryPool.query(
+    `CREATE TRIGGER \`${trigger}\` BEFORE INSERT ON spend_log FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'synthetic batch ledger failure'`,
+  );
+  try {
+    await assert.rejects(
+      retainBatchUncertainty("safety-batch-uncertain", "synthetic response lost"),
+      /synthetic batch ledger failure/i,
+    );
+    const [unchanged] = await db
+      .select()
+      .from(schema.batches)
+      .where(eq(schema.batches.providerBatchId, "safety-batch-uncertain"));
+    assert.equal(unchanged.status, "ended", "failed transfer rolled back the batch terminal state");
+    assert.equal(
+      (
+        await db
+          .select()
+          .from(schema.spendHolds)
+          .where(eq(schema.spendHolds.owner, "batch:safety-batch-uncertain"))
+      ).length,
+      0,
+      "failed transfer rolled back its recovery hold",
+    );
+  } finally {
+    await recoveryPool.query(`DROP TRIGGER IF EXISTS \`${trigger}\``);
+  }
+  assert.equal(
+    await retainBatchUncertainty("safety-batch-uncertain", "synthetic response lost"),
+    2.5,
+  );
   assert.equal(await retainBatchUncertainty("safety-batch-uncertain", "retry after crash"), 0);
   const [batch] = await db
     .select()
