@@ -1,6 +1,6 @@
 import { insertReturning } from "@/db/mutations";
 import assert from "node:assert/strict";
-import { after, beforeEach, test } from "node:test";
+import { after, beforeEach, mock, test } from "node:test";
 
 import { JobState } from "@google/genai";
 import { eq } from "drizzle-orm";
@@ -10,7 +10,8 @@ import { readUsage } from "@/lib/ai";
 import { fakeGeminiClient, PAYLOADS, USAGE } from "@/lib/ai-fake";
 import { estimateCostUsd } from "@/lib/analysis/pricing";
 import { pollSources } from "@/lib/poll";
-import { monthToDateUsd } from "@/lib/spend";
+import { monthToDateUsd, listUncertainSpendHolds } from "@/lib/spend";
+import { collectBatchResults, openBatches } from "@/lib/analysis/batch";
 
 import { resetTables, teardown } from "./setup";
 
@@ -63,6 +64,7 @@ async function seedPendingVideo(n: number) {
 }
 
 beforeEach(async () => {
+  mock.restoreAll();
   process.env.MONTHLY_SPEND_CAP_USD = CAP;
   // A poll run builds its Data API client before it looks at how many sources
   // there are, and that constructor requires a key. No source is seeded in this
@@ -249,9 +251,34 @@ test("one failed entry is recorded without losing the rest of the batch", async 
   // The status code is the actionable part: 429 means retrying might work,
   // 400 means it never will.
   assert.match(failed.error ?? "", /batch error: 429: rate limited/);
-  assert.equal(Number(failed.costUsd), 0, "an entry that produced nothing is billed nothing");
+  assert.equal(
+    Number(failed.costUsd),
+    0,
+    "a failed entry has no verified charge, with uncertainty tracked separately",
+  );
 
-  assert.equal((await monthToDateUsd()).toFixed(6), expectedBatchAnalysisUsd().toFixed(6));
+  const [batch] = await db.select().from(schema.batches);
+  assert.equal(batch.status, "uncertain");
+  const retained = Number(batch.estimatedUsd);
+  assert.equal(
+    (await monthToDateUsd()).toFixed(6),
+    (expectedBatchAnalysisUsd() + retained).toFixed(6),
+  );
+  const [hold] = await listUncertainSpendHolds();
+  assert.equal(Number(hold.uncertainUsd), retained);
+  assert.match(hold.recoveryNote ?? "", /error|response/i);
+  assert.equal(
+    (await openBatches()).length,
+    0,
+    "automatic retrieval stops at the uncertainty latch",
+  );
+  const billedOnce = await monthToDateUsd();
+  await collectBatchResults(batch.providerBatchId);
+  assert.equal(
+    await monthToDateUsd(),
+    billedOnce,
+    "explicit recollection cannot transfer uncertainty twice",
+  );
 });
 
 test("a cap that will not fund the batch skips the run instead of submitting", async () => {
@@ -336,3 +363,41 @@ test("a video that clears the bar is screened and then analysed", async () => {
     delete process.env.SCREEN_MIN_SCORE;
   }
 });
+
+for (const mode of ["missing-usage", "truncated", "empty"] as const) {
+  test("completed batch " + mode + " retains uncertainty without a second transfer", async () => {
+    await seedPendingVideo(1);
+    await seedPendingVideo(2);
+    const fake = fakeGeminiClient();
+    const original = fake.batches.get;
+    mock.method(fake.batches, "get", async (params: Parameters<typeof original>[0]) => {
+      const job = await original(params);
+      const entries = job.dest?.inlinedResponses;
+      if (entries?.length) {
+        if (mode === "empty") entries.splice(0);
+        else if (mode === "truncated") entries.splice(1);
+        else if (entries[0].response) delete entries[0].response.usageMetadata;
+      }
+      return job;
+    });
+    const result = await pollSources({ wait: true });
+    assert.ok(result.submitted);
+    const [batch] = await db.select().from(schema.batches);
+    assert.equal(batch.status, "uncertain");
+    const [hold] = await listUncertainSpendHolds();
+    assert.ok(hold.recoveryNote, "the owner has a concrete reconciliation reason");
+    assert.equal(Number(hold.uncertainUsd), Number(batch.estimatedUsd));
+    const expected =
+      Number(batch.estimatedUsd) + (mode === "empty" ? 0 : expectedBatchAnalysisUsd());
+    assert.equal((await monthToDateUsd()).toFixed(6), expected.toFixed(6));
+    const billed = await monthToDateUsd();
+    await collectBatchResults(batch.providerBatchId);
+    assert.equal(await monthToDateUsd(), billed);
+    assert.equal((await openBatches()).length, 0);
+    assert.equal(
+      fake.callsOf("batches.create").length,
+      1,
+      "unknown results never authorize a replacement submission",
+    );
+  });
+}

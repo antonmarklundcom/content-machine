@@ -57,9 +57,11 @@ test("concurrent recordSpend calls cannot lose an update", async () => {
   assert.equal(Number(await monthToDateUsd(JAN)).toFixed(4), "0.2000");
 });
 
-test("recordSpend ignores zero and negative amounts", async () => {
+test("recordSpend ignores zero and rejects negative or non-finite amounts", async () => {
   await recordSpend(0, JAN);
-  await recordSpend(-5, JAN);
+  await assert.rejects(recordSpend(-5, JAN), /finite and non-negative/);
+  await assert.rejects(recordSpend(Number.NaN, JAN), /finite and non-negative/);
+  await assert.rejects(recordSpend(Infinity, JAN), /finite and non-negative/);
 
   assert.equal(await monthToDateUsd(JAN), 0);
   assert.equal((await db.select().from(schema.spendLog)).length, 0);

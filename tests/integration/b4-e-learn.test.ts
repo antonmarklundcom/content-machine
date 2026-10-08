@@ -428,7 +428,11 @@ test("the Worker's learn SQL runs on real MariaDB: /done, candidates, nudge mark
   await mysqlQuery(NUDGE_MARK_SQL, [`learn-nudged:${clip.id}`]);
   await mysqlQuery(NUDGE_MARK_SQL, [`learn-nudged:${clip.id}`]);
   const [marked] = await mysqlQuery(NUDGE_CANDIDATES_SQL, []);
-  assert.ok(marked!.last_nudged_at instanceof Date);
+  const lastNudgedAt = new Date(String(marked!.last_nudged_at));
+  assert.ok(
+    Number.isFinite(lastNudgedAt.getTime()),
+    "MariaDB's dateStrings value is a valid timestamp",
+  );
 
   const res = await handleWebhook(post(`/done ${clip.id}`), env, mysqlQuery);
   assert.match(((await res.json()) as { text: string }).text, /Marked "W" implemented/);
@@ -479,12 +483,22 @@ async function seedAiinsightsFixture() {
   );
 }
 
-test("aiinsights rows map onto learn clips (URL, steps, category, implemented, saved date)", async () => {
-  await seedAiinsightsFixture();
-  const rows = await readAiinsightsItems(
-    async (text) => mysqlQuery(text, []),
+async function readSyntheticAiinsightsItems() {
+  return readAiinsightsItems(
+    async (text) =>
+      (await mysqlQuery(text, [])).map((row) => ({
+        ...row,
+        // The real aiinsights source is PostgreSQL, whose boolean driver value
+        // is true/false; mysql2 represents this MariaDB fixture as 1/0.
+        implemented: row.implemented === true || row.implemented === 1,
+      })),
     "aiinsights_test_items",
   );
+}
+
+test("aiinsights rows map onto learn clips (URL, steps, category, implemented, saved date)", async () => {
+  await seedAiinsightsFixture();
+  const rows = await readSyntheticAiinsightsItems();
   assert.equal(rows.length, 5);
   const a = mapAiinsightsItem(rows[0]!)!;
   assert.equal(a.url, "https://github.com/a/b");
@@ -517,10 +531,7 @@ test("aiinsights rows map onto learn clips (URL, steps, category, implemented, s
 test("the import is idempotent by canonical URL and honours --dry-run", async () => {
   await seedAiinsightsFixture();
   await db.insert(schema.clips).values({ url: "https://example.com/existing", purpose: "inspo" });
-  const rows = await readAiinsightsItems(
-    async (text) => mysqlQuery(text, []),
-    "aiinsights_test_items",
-  );
+  const rows = await readSyntheticAiinsightsItems();
 
   const dry = await importAiinsights(rows, { dryRun: true });
   assert.deepEqual(

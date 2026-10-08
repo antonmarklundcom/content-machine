@@ -197,7 +197,7 @@ test("the Telegram Worker's upsert works against the native MariaDB clips table"
 
 test("an unchanged Worker duplicate is Already saved, including no-note captures", async () => {
   const { SAVE_SQL } = await import("../../workers/telegram-capture/src/handler");
-  const args = ["https://worker.test/unchanged", "other", null];
+  const args = ["https://worker.test/unchanged", "other", null, null, "other", "[]", null];
   const first = await mysqlQuery(SAVE_SQL, args);
   const repeat = await mysqlQuery(SAVE_SQL, args);
   assert.equal(first[0].created, true);

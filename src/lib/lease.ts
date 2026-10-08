@@ -1,12 +1,10 @@
-import { upsertReturning } from "@/db/mutations";
 /**
  * Named, expiring locks on the `leases` table (PLAN.md §1.19).
  *
- * Acquire is ONE statement — an upsert whose update only fires when the current
- * lease has expired — because the Neon HTTP driver runs a single statement per
- * request: no transaction, no session, so no advisory lock either. Postgres
- * serialises the conflicting inserts on the primary key, so of two concurrent
- * callers exactly one gets a row back.
+ * Acquire uses a native conditional MariaDB upsert plus a locking read in
+ * one transaction. The primary key serializes competitors; the generated
+ * holder proves which caller won. No application-clock expiry or transaction
+ * replay around external side effects is required.
  *
  * All time arithmetic happens in SQL against the database's `now()`, never
  * `Date.now()`: two machines (the PC's Task Scheduler run and a deployed route)
@@ -33,16 +31,27 @@ export const POLL_LEASE_TTL_MS = 30 * 60 * 1000;
 export async function acquireLease(name: string, ttlMs: number): Promise<Lease | null> {
   const holder = randomUUID();
   const expiresAt = sql`timestampadd(microsecond, ${Math.max(1, Math.round(ttlMs)) * 1000}, current_timestamp(3))`;
-  const [row] = await upsertReturning(
-    db,
-    leases,
-    { name, holder, expiresAt },
-    {
-      target: leases.name,
-      set: { holder, expiresAt },
-      setWhere: sql`${leases.expiresAt} < current_timestamp(3)`,
-    },
-  );
+  const row = await db.transaction(async (tx) => {
+    // leases has only its primary-key identity; native ODKU locks that row
+    // exclusively without a duplicate-INSERT shared-lock upgrade.
+    // MySQL assignments are left-to-right: holder must be assigned BEFORE
+    // expiresAt, so both conditions inspect the original expiry.
+    await tx
+      .insert(leases)
+      .values({ name, holder, expiresAt })
+      .onDuplicateKeyUpdate({
+        set: {
+          holder: sql`if(${leases.expiresAt} < current_timestamp(3), ${holder}, ${leases.holder})`,
+          expiresAt: sql`if(${leases.expiresAt} < current_timestamp(3), ${expiresAt}, ${leases.expiresAt})`,
+        },
+      });
+    const [claimed] = await tx
+      .select()
+      .from(leases)
+      .where(and(eq(leases.name, name), eq(leases.holder, holder)))
+      .for("update");
+    return claimed;
+  });
   return row ?? null;
 }
 

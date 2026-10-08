@@ -15,7 +15,7 @@ async function main(): Promise<void> {
   const started = Date.now();
   const [row] = await queryRows<{ version: string; db: string; now: string }>(
     db,
-    sql`select version() as version, database() as db, now() as now`,
+    sql`select version() as version, database() as db, current_timestamp(3) as now`,
   );
   console.log(`Connected in ${Date.now() - started}ms`);
   console.log(`  MariaDB   ${row?.version ?? "?"}`);

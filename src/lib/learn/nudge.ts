@@ -19,7 +19,7 @@ export const RENUDGE_AFTER_MS = 14 * DAY_MS;
  */
 export const NUDGE_MARK_PREFIX = "learn-nudged:";
 export const NUDGE_MARK_SQL = `insert into leases (name, holder, expires_at)
-values (?, 'learn-nudge', date_add(now(), interval 14 day))
+values (?, 'learn-nudge', date_add(current_timestamp(3), interval 14 day))
 on duplicate key update holder = values(holder), expires_at = values(expires_at)`;
 
 /**

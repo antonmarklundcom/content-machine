@@ -13,7 +13,7 @@ export async function setScriptThumbnail(id: number, file: string | null): Promi
   const [row] = await updateReturning(
     db,
     scripts,
-    { thumbnailFile: file, updatedAt: sql`now()` },
+    { thumbnailFile: file, updatedAt: sql`current_timestamp(3)` },
     eq(scripts.id, id),
   );
   return row ?? null;

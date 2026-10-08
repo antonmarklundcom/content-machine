@@ -17,7 +17,8 @@ import {
 } from "@/lib/higgsfield.actions";
 import { resetPreflightCache } from "@/lib/higgsfield/preflight";
 import { pidAlive } from "@/lib/higgsfield/process";
-import { rulePath } from "@/lib/higgsfield/prompt";
+import { workerIdentity } from "@/lib/higgsfield/ownership";
+import { extractArgument, rulePath } from "@/lib/higgsfield/prompt";
 import {
   cancelJob,
   getJob,
@@ -44,6 +45,7 @@ import { resetTables, teardown } from "./setup";
 
 const FAKE = path.resolve("tests/fixtures/fake-claude-higgsfield.mjs");
 const ENV_KEYS = [
+  "APP_MODE",
   "MEDIA_ROOT",
   "CLAUDE_CLI_PATH",
   "CLAUDE_CLI_BIN",
@@ -203,7 +205,12 @@ test("a free run: queued → running → done, with job ids, files, credits and 
   const allowed = call.args[call.args.indexOf("--allowedTools") + 1];
   assert.ok(allowed.startsWith("mcp__higgsfield,Read(/"));
   assert.ok(allowed.includes(`Write(${rulePath(root)}/**)`));
-  assert.ok(allowed.includes('Bash(curl -fsSL --create-dirs -o "'));
+  const downloader = `node "${path.resolve("scripts/media-download.mjs").replaceAll("\\", "/")}" "${root.replaceAll("\\", "/")}"`;
+  assert.deepEqual(
+    allowed.split(",").filter((rule) => rule.startsWith("Bash(")),
+    [`Bash(${downloader} :*)`],
+  );
+  assert.ok(call.stdin.includes(`${downloader} "<path relative to MEDIA_ROOT>"`));
   assert.ok(call.stdin.startsWith("/higgsfield-free # Free prompt — Guide"));
   assert.ok(call.stdin.includes("three photos of the Asunción skyline at dusk"));
   assert.ok(
@@ -310,40 +317,110 @@ test("a held lease refuses a concurrent start without a row", async () => {
   assert.equal((await db.select().from(schema.higgsfieldJobs)).length, 0);
 });
 
-test("the reaper fails runs whose process is gone, and stale queued rows", async () => {
+test("the PC reaper fails stale owned work while preserving foreign work and successor leases", async () => {
+  const now = new Date();
+  const staleAt = new Date(now.getTime() - 20 * 60 * 1000);
+  const expiredAt = new Date(now.getTime() - 60_000);
+  const future = new Date(now.getTime() + 60 * 60 * 1000);
   const dead = spawnSync(process.execPath, ["-e", ""]).pid!;
-  const [gone] = await insertReturning(db, schema.higgsfieldJobs, {
-    kind: "import",
-    prompt: "x",
-    maxCredits: 0,
-    status: "running",
-    pid: dead,
-    startedAt: new Date(),
-  });
-  const [alive] = await insertReturning(db, schema.higgsfieldJobs, {
-    kind: "free",
+  const owned = {
+    kind: "free" as const,
     prompt: "x",
     maxCredits: 1,
-    status: "running",
+    status: "running" as const,
+    workerHost: workerIdentity.host,
+    workerInstance: "stopped-test-worker",
+    heartbeatAt: staleAt,
+  };
+  await db.insert(schema.leases).values([
+    { name: "higgsfield:import", holder: "stopped-import-holder", expiresAt: expiredAt },
+    { name: "higgsfield:protected", holder: "live-holder", expiresAt: future },
+    { name: "higgsfield:successor", holder: "successor-holder", expiresAt: future },
+  ]);
+  const [gone] = await insertReturning(db, schema.higgsfieldJobs, {
+    ...owned,
+    kind: "import",
+    maxCredits: 0,
+    pid: dead,
+    startedAt: now,
+    leaseName: "higgsfield:import",
+    leaseHolder: "stopped-import-holder",
+    externalJobIds: ["retained-import-id"],
+  });
+  const [fresh] = await insertReturning(db, schema.higgsfieldJobs, {
+    ...owned,
     pid: process.pid,
-    startedAt: new Date(),
+    startedAt: now,
+    heartbeatAt: now,
   });
   const [stale] = await insertReturning(db, schema.higgsfieldJobs, {
-    kind: "free",
-    prompt: "x",
-    maxCredits: 1,
-    createdAt: new Date(Date.now() - 20 * 60 * 1000),
+    ...owned,
+    status: "queued",
+    createdAt: staleAt,
   });
-  await acquireLease("higgsfield:import", 60 * 60 * 1000);
+  const [foreign] = await insertReturning(db, schema.higgsfieldJobs, {
+    ...owned,
+    workerHost: workerIdentity.host === "foreign-worker" ? "other-worker" : "foreign-worker",
+    pid: process.pid,
+    externalJobIds: ["foreign-remote-id"],
+  });
+  const [legacy] = await insertReturning(db, schema.higgsfieldJobs, {
+    ...owned,
+    workerHost: null,
+    workerInstance: null,
+    pid: dead,
+  });
+  const [protectedJob] = await insertReturning(db, schema.higgsfieldJobs, {
+    ...owned,
+    leaseName: "higgsfield:protected",
+    leaseHolder: "live-holder",
+  });
+  const [superseded] = await insertReturning(db, schema.higgsfieldJobs, {
+    ...owned,
+    leaseName: "higgsfield:successor",
+    leaseHolder: "old-holder",
+  });
 
-  const reaped = await reapJobs();
-  assert.deepEqual(reaped.sort(), [gone.id, stale.id].sort());
-  assert.equal((await getJob(gone.id))?.status, "failed");
-  assert.match((await getJob(gone.id))?.error ?? "", /process is gone/);
-  assert.equal((await getJob(alive.id))?.status, "running");
+  // Hosted page views leave even this PC's stale identified work untouched.
+  process.env.APP_MODE = "online";
+  assert.deepEqual(await reapJobs(now), []);
+  assert.equal((await getJob(gone.id))?.status, "running");
+  assert.equal((await getJob(stale.id))?.status, "queued");
+  assert.equal(
+    (await db.select().from(schema.leases).where(eq(schema.leases.name, "higgsfield:import")))[0]
+      ?.holder,
+    "stopped-import-holder",
+  );
+  process.env.APP_MODE = "pc";
+
+  const reaped = await reapJobs(now);
+  assert.deepEqual(
+    reaped.sort((a, b) => a - b),
+    [gone.id, stale.id, superseded.id].sort((a, b) => a - b),
+  );
+  const failed = await getJob(gone.id);
+  assert.equal(failed?.status, "failed");
+  assert.match(failed?.error ?? "", /owning worker stopped heartbeating/);
+  assert.deepEqual(failed?.externalJobIds, ["retained-import-id"]);
   assert.equal((await getJob(stale.id))?.status, "failed");
+  assert.equal((await getJob(superseded.id))?.status, "failed");
+  for (const unchanged of [fresh, foreign, legacy, protectedJob])
+    assert.equal((await getJob(unchanged.id))?.status, "running");
+  assert.deepEqual((await getJob(foreign.id))?.externalJobIds, ["foreign-remote-id"]);
+  assert.equal(pidAlive(process.pid), true);
+  const [successor] = await db
+    .select()
+    .from(schema.leases)
+    .where(eq(schema.leases.name, "higgsfield:successor"));
+  assert.equal(successor?.holder, "successor-holder", "reaping cannot release a successor's lease");
+  assert.equal(calls().length, 0, "reaping never invokes the provider CLI");
 
-  // The reaped import's lease went with it: a new import can start.
+  // The expired lease is released by its holder, so a new import can start.
+  assert.equal(
+    (await db.select().from(schema.leases).where(eq(schema.leases.name, "higgsfield:import")))
+      .length,
+    0,
+  );
   const job = await (await startJob({ kind: "import", maxCredits: 0 })).finished;
   assert.equal(job.status, "done");
 });
@@ -362,16 +439,47 @@ test("a missing binary or an unplugged drive fails the run with a plain message"
   assert.equal(calls().length, 0);
 });
 
-test("retry of a free run reuses its request in a new row", async () => {
+test("retry with retained remote IDs preserves the request in a zero-credit recovery row", async () => {
   const first = await (
     await startJob({ kind: "free", description: "a red bicycle in the rain", maxCredits: 4 })
   ).finished;
-  const second = await (await retryJob(first.id)).finished;
+  assert.deepEqual(first.externalJobIds, ["abc12345"]);
+  const originalArgument = extractArgument(first.prompt);
+  assert.ok(originalArgument);
+
+  // This existing fake mode reports no new HF_JOB or HF_FILE markers.
+  process.env.FAKE_CLAUDE_MODE = "fail";
+  const second = await (await retryJob(first.id, 100)).finished;
   assert.notEqual(second.id, first.id);
   assert.equal(second.kind, "free");
-  assert.equal(second.maxCredits, 4);
+  assert.equal(second.status, "failed");
+  assert.equal(second.maxCredits, 0, "known provider IDs override a requested positive ceiling");
+  assert.equal(second.recoveryOfJobId, first.id);
+  assert.deepEqual(second.externalJobIds, first.externalJobIds);
+  assert.deepEqual(second.outputPaths, first.outputPaths);
+  assert.equal(extractArgument(second.prompt), originalArgument);
   assert.ok(second.prompt.includes("a red bicycle in the rain"));
   assert.ok(second.prompt.includes(`job #${second.id}`));
+  assert.ok(second.prompt.includes(`Source content-engine job: #${first.id}.`));
+  assert.ok(second.prompt.includes('Known Higgsfield jobs: ["abc12345"].'));
+  assert.ok(second.prompt.includes("Spend at most 0 credits"));
+  assert.ok(
+    second.prompt.includes("Never call a generation, submission, edit, or paid provider tool"),
+  );
+
+  const [initialCall, recoveryCall] = calls();
+  assert.equal(calls().length, 2);
+  assert.equal(initialCall.stdin, first.prompt);
+  assert.equal(recoveryCall.stdin, second.prompt);
+  const allowed = recoveryCall.args[recoveryCall.args.indexOf("--allowedTools") + 1];
+  assert.deepEqual(
+    allowed.split(",").filter((tool) => tool.startsWith("mcp__")),
+    ["mcp__higgsfield__balance", "mcp__higgsfield__jobs_wait", "mcp__higgsfield__show_generations"],
+  );
+  const source = await getJob(first.id);
+  assert.equal(source?.maxCredits, 4);
+  assert.equal(source?.prompt, first.prompt);
+  assert.deepEqual(source?.externalJobIds, first.externalJobIds);
 });
 
 test("actions and the status route are owner-only", async () => {

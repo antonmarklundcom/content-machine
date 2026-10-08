@@ -37,6 +37,7 @@ import { finalizeHiggsfieldVoiceJob } from "@/lib/voice/higgsfield-takes";
 import { buildVoiceRunPrompt } from "@/lib/higgsfield/voice-prompt";
 import { voiceArgument } from "@/lib/higgsfield/voice";
 import { insertAnalysis } from "@/lib/analysis/run";
+import { listGaps } from "@/lib/gaps/find";
 
 import { resetTables, teardown } from "./setup";
 
@@ -85,6 +86,43 @@ test("insert/update/delete helpers return only the requested projection", async 
     title: schema.clips.title,
   });
   assert.deepEqual(deleted, { id: inserted.id, title: "Updated" });
+});
+
+test("listGaps filters by brand and orders scored gaps before null scores", async () => {
+  await db.insert(schema.brands).values([
+    {
+      id: "gaps-primary",
+      name: "Primary",
+      domain: "primary.test",
+      niche: "synthetic",
+      market: "global",
+      platforms: [],
+    },
+    {
+      id: "gaps-other",
+      name: "Other",
+      domain: "other.test",
+      niche: "synthetic",
+      market: "global",
+      platforms: [],
+    },
+  ]);
+  await db.insert(schema.contentGaps).values([
+    { brandId: "gaps-primary", topic: "Score forty", score: 40 },
+    { brandId: "gaps-primary", topic: "No score", score: null },
+    { brandId: "gaps-primary", topic: "Score eighty", score: 80 },
+    { brandId: "gaps-other", topic: "Other brand", score: 100 },
+  ]);
+
+  const rows = await listGaps("gaps-primary");
+  assert.deepEqual(
+    rows.map(({ topic, score }) => [topic, score]),
+    [
+      ["Score eighty", 80],
+      ["Score forty", 40],
+      ["No score", null],
+    ],
+  );
 });
 
 test("a duplicate on a different unique key is not mistaken for the requested conflict", async () => {
@@ -448,7 +486,7 @@ test("batch uncertainty transfer is atomic and idempotent", async () => {
 
 test("analysis and billing roll back together and a collection retry records one result and charge", async () => {
   const [video] = await insertReturning(db, schema.videos, {
-    youtubeId: `safety${process.pid}${Date.now()}`,
+    youtubeId: `safe${String(process.pid).slice(-8)}`,
     title: "Synthetic batch result",
   });
   const trigger = `safety_spend_failure_${process.pid}_${Date.now()}`;

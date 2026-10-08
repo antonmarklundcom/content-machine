@@ -88,7 +88,7 @@ export async function updateFact(id: number, input: FactInput): Promise<Fact | n
   const [row] = await updateReturning(
     db,
     facts,
-    { ...next, ...(changed ? { updatedAt: sql`now()` } : {}) },
+    { ...next, ...(changed ? { updatedAt: sql`current_timestamp(3)` } : {}) },
     eq(facts.id, id),
   );
   return row ?? null;
@@ -99,7 +99,7 @@ export async function markFactChecked(id: number, at?: Date): Promise<Fact | nul
   const [row] = await updateReturning(
     db,
     facts,
-    { lastCheckedAt: at ?? sql`now()` },
+    { lastCheckedAt: at ?? sql`current_timestamp(3)` },
     eq(facts.id, id),
   );
   return row ?? null;

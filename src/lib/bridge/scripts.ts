@@ -117,7 +117,7 @@ export async function updateScriptBody(
       body,
       ...(patch.title !== undefined ? { title: checkTitle(patch.title) } : {}),
       ...(patch.language !== undefined ? { language: patch.language } : {}),
-      updatedAt: sql`now()`,
+      updatedAt: sql`current_timestamp(3)`,
     },
     and(
       eq(scripts.id, id),
@@ -149,9 +149,9 @@ export async function setScriptStatus(id: number, status: ScriptStatus): Promise
     scripts,
     {
       status,
-      recordedAt: recorded ? sql`coalesce(${scripts.recordedAt}, now())` : null,
-      postedAt: posted ? sql`coalesce(${scripts.postedAt}, now())` : null,
-      updatedAt: sql`now()`,
+      recordedAt: recorded ? sql`coalesce(${scripts.recordedAt}, current_timestamp(3))` : null,
+      postedAt: posted ? sql`coalesce(${scripts.postedAt}, current_timestamp(3))` : null,
+      updatedAt: sql`current_timestamp(3)`,
     },
     eq(scripts.id, id),
   );
@@ -170,7 +170,7 @@ async function setColumns(
   const [row] = await updateReturning(
     db,
     scripts,
-    { ...values, updatedAt: sql`now()` },
+    { ...values, updatedAt: sql`current_timestamp(3)` },
     eq(scripts.id, id),
   );
   return row ?? null;

@@ -56,9 +56,9 @@ on duplicate key update id = last_insert_id(id), note = if(url = values(url), co
  * `/done <id>` and `/commit <id>` from the weekly learn nudge (build 4 §3.E):
  * one UPDATE each, learn clips only. `/done` keeps an earlier implemented date.
  */
-export const LEARN_DONE_SQL = `update clips set implemented_at = coalesce(implemented_at, now())
+export const LEARN_DONE_SQL = `update clips set implemented_at = coalesce(implemented_at, current_timestamp(3))
 where id = ? and purpose = 'learn'`;
-export const LEARN_COMMIT_SQL = `update clips set committed_at = now()
+export const LEARN_COMMIT_SQL = `update clips set committed_at = current_timestamp(3)
 where id = ? and purpose = 'learn'`;
 
 const PURPOSE_LABEL: Record<CapturePurpose, string> = {

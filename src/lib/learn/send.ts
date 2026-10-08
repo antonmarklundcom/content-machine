@@ -80,11 +80,14 @@ export async function markNudged(clipId: number): Promise<void> {
     {
       name: `${NUDGE_MARK_PREFIX}${clipId}`,
       holder: "learn-nudge",
-      expiresAt: sql`date_add(now(), interval 14 day)`,
+      expiresAt: sql`date_add(current_timestamp(3), interval 14 day)`,
     },
     {
       target: leases.name,
-      set: { holder: "learn-nudge", expiresAt: sql`date_add(now(), interval 14 day)` },
+      set: {
+        holder: "learn-nudge",
+        expiresAt: sql`date_add(current_timestamp(3), interval 14 day)`,
+      },
     },
   );
 }

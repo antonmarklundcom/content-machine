@@ -266,7 +266,7 @@ export async function topOutliersForBrand(
       order by an.id desc limit 1
     )
     where v.view_count is not null
-      and v.published_at >= date_sub(now(), interval ${days} day)
+      and v.published_at >= date_sub(current_timestamp(3), interval ${days} day)
     order by score desc, v.id desc
     limit ${limit}
   `,

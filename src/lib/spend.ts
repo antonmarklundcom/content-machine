@@ -139,7 +139,12 @@ const PROCESS_OWNER = `pid:${process.pid}:${randomUUID()}`;
 type SpendTx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 async function lockAndReconcile(tx: SpendTx): Promise<void> {
-  await insertIfAbsent(tx, spendReservation, { id: 1, reservedUsd: "0" }, {});
+  // Native single-PK ODKU obtains an exclusive lock directly. A failed
+  // duplicate INSERT followed by FOR UPDATE can deadlock on shared-lock upgrades.
+  await tx
+    .insert(spendReservation)
+    .values({ id: 1, reservedUsd: "0" })
+    .onDuplicateKeyUpdate({ set: { id: 1 } });
   await tx.execute(sql`select id from spend_reservation where id = 1 for update`);
   const expired = await updateReturning(
     tx,
@@ -150,7 +155,7 @@ async function lockAndReconcile(tx: SpendTx): Promise<void> {
       accountedDay: utcDay(),
       updatedAt: new Date(),
     },
-    and(eq(spendHolds.status, "held"), sql`${spendHolds.expiresAt} <= now()`),
+    and(eq(spendHolds.status, "held"), sql`${spendHolds.expiresAt} <= current_timestamp(3)`),
   );
   // A crashed process may already have paid. Retain the estimate as uncertain
   // spend, rather than reopening the cap and accidentally paying again.

@@ -1,10 +1,11 @@
 import { insertReturning } from "@/db/mutations";
 import assert from "node:assert/strict";
-import { after, beforeEach, test } from "node:test";
+import { after, afterEach, beforeEach, test } from "node:test";
 import { createPool } from "mysql2/promise";
 import { createRequire } from "node:module";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { tmpdir } from "node:os";
 import { createHash } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
@@ -32,6 +33,8 @@ const NOW = new Date("2026-10-08T12:00:00Z"),
 const ddlPool = createPool(databaseOptions(process.env.DATABASE_URL));
 const FAST = { poll: { tries: 1, delayMs: 0 } };
 let ownerId: number, accountId: number, ownerCookie: string;
+let testMediaRoot: string | undefined;
+const originalMediaRoot = process.env.MEDIA_ROOT;
 const require = createRequire(import.meta.url);
 async function as<T>(cookie: string, fn: () => Promise<T>): Promise<T> {
   let value: T | undefined;
@@ -50,6 +53,8 @@ async function as<T>(cookie: string, fn: () => Promise<T>): Promise<T> {
 }
 beforeEach(async () => {
   await resetTables();
+  testMediaRoot = await mkdtemp(path.join(tmpdir(), "content-machine-publishing-safety-"));
+  process.env.MEDIA_ROOT = testMediaRoot;
   process.env.ENCRYPTION_KEY = generateEncryptionKey();
   const owner = await signIn("owner");
   ownerId = owner.userId;
@@ -90,6 +95,12 @@ beforeEach(async () => {
     integrationId: connection.id,
   });
   accountId = account.id;
+});
+afterEach(async () => {
+  if (testMediaRoot) await rm(testMediaRoot, { recursive: true, force: true });
+  testMediaRoot = undefined;
+  if (originalMediaRoot === undefined) delete process.env.MEDIA_ROOT;
+  else process.env.MEDIA_ROOT = originalMediaRoot;
 });
 after(async () => {
   await ddlPool.end();

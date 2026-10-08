@@ -26,7 +26,7 @@ test("BUG-09: a stale caller re-reads a reconnected token and never refreshes ol
     calls++;
     throw Error("stale refresh must never run");
   });
-  assert.deepEqual(result, { ok: true, token: "new" });
+  assert.deepEqual(result, { ok: true, token: "new", credentialVersion: 1 });
   assert.equal(calls, 0);
   assert.equal((await getConnection("youtube", old.id))?.status, "ok");
 });
@@ -41,13 +41,21 @@ test("BUG-09: repeated stale callers use the first durable refresh, without a se
       accessExpiresAt: new Date(Date.now() + 3600000),
     };
   };
-  assert.deepEqual(await accessToken(old, renew), { ok: true, token: "fresh" });
-  assert.deepEqual(await accessToken(old, renew), { ok: true, token: "fresh" });
+  assert.deepEqual(await accessToken(old, renew), {
+    ok: true,
+    token: "fresh",
+    credentialVersion: 1,
+  });
+  assert.deepEqual(await accessToken(old, renew), {
+    ok: true,
+    token: "fresh",
+    credentialVersion: 1,
+  });
   assert.equal(calls, 1);
 });
 
 test(
-  "native PostgreSQL: competing refresh callers use one rotated token",
+  "native MariaDB: competing refresh callers use one rotated token",
   { skip: !!(globalThis as { auditPglite?: unknown }).auditPglite },
   async () => {
     const old = await saveConnection(input("old", "refresh", new Date(0)));
@@ -75,8 +83,8 @@ test(
     const second = accessToken(old, refresh);
     release();
     assert.deepEqual(await Promise.all([first, second]), [
-      { ok: true, token: "fresh" },
-      { ok: true, token: "fresh" },
+      { ok: true, token: "fresh", credentialVersion: 1 },
+      { ok: true, token: "fresh", credentialVersion: 1 },
     ]);
     assert.equal(calls, 1);
   },

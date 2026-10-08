@@ -90,7 +90,7 @@ export async function upsertFamilyFacts(
         sourceUrl: row.sourceUrl,
         notes: row.notes,
         ...(row.lastCheckedAt ? { lastCheckedAt: row.lastCheckedAt } : {}),
-        ...(contentChanged ? { updatedAt: sql`now()` } : {}),
+        ...(contentChanged ? { updatedAt: sql`current_timestamp(3)` } : {}),
       })
       .where(eq(facts.id, current.id));
     result.updated++;

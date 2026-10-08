@@ -96,7 +96,7 @@ export async function compareBrandChannels(brandId: string): Promise<BrandCompar
       counts as (
         select v.source_id,
           count(*) as video_count,
-          sum(case when v.published_at >= date_sub(now(), interval ${UPLOAD_WINDOW_DAYS} day)
+          sum(case when v.published_at >= date_sub(current_timestamp(3), interval ${UPLOAD_WINDOW_DAYS} day)
             then 1 else 0 end) as recent_uploads
         from videos v
         join linked l on l.source_id = v.source_id

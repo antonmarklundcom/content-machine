@@ -388,7 +388,7 @@ export async function reapStuckClips(): Promise<number> {
       eq(clips.status, "ingesting"),
       // When ingest started, not when the link was saved: a retry of an
       // old clip is fresh. Rows from before the column fall back to saved_at.
-      sql`coalesce(${clips.ingestStartedAt}, ${clips.savedAt}) < date_sub(now(), interval ${CLIP_INGEST_TIMEOUT_MINUTES} minute)`,
+      sql`coalesce(${clips.ingestStartedAt}, ${clips.savedAt}) < date_sub(current_timestamp(3), interval ${CLIP_INGEST_TIMEOUT_MINUTES} minute)`,
     ),
     { id: clips.id },
   );

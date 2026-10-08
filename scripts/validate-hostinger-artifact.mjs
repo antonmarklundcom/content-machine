@@ -100,6 +100,17 @@ try {
   }
   if (!ready)
     throw new Error(`Standalone server did not serve static assets before timeout.\n${output}`);
+  const login = await fetch(`${base}/youtube/login`);
+  const loginHtml = await login.text();
+  if (
+    login.status !== 200 ||
+    !loginHtml.includes('name="email"') ||
+    !loginHtml.includes('name="password"')
+  ) {
+    throw new Error(
+      `Standalone login form did not load without database credentials (status ${login.status}).`,
+    );
+  }
   const privateAsset = await fetch(`${base}/api/media/asset/1`);
   if (privateAsset.status !== 401) {
     throw new Error(
@@ -107,7 +118,7 @@ try {
     );
   }
   console.log(
-    "Validated standalone mysql2 closure, static asset serving, and private-media 401 without DATABASE_URL.",
+    "Validated standalone mysql2 closure, static asset serving, login form, and private-media 401 without DATABASE_URL.",
   );
 } finally {
   child.kill("SIGTERM");

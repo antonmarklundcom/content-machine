@@ -100,11 +100,12 @@ export async function updateIdea(id: number, update: IdeaUpdate): Promise<Idea |
   if (update.angle !== undefined) set.angle = update.angle;
   if (update.draftCopy !== undefined) set.draftCopy = update.draftCopy;
   if (update.status !== undefined) {
-    set.status = update.status;
+    // MariaDB SET assignments run left-to-right: read the old status before writing it.
     set.postedAt =
       update.status === "posted"
-        ? sql`case when ${ideas.status} = 'posted' then ${ideas.postedAt} else now() end`
+        ? sql`case when ${ideas.status} = 'posted' then ${ideas.postedAt} else current_timestamp(3) end`
         : null;
+    set.status = update.status;
   }
   if (Object.keys(set).length === 0) return getIdea(id);
 
