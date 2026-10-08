@@ -1,0 +1,12 @@
+{
+  "data": [
+    { "permission": "pages_show_list", "status": "granted" },
+    { "permission": "pages_read_engagement", "status": "granted" },
+    { "permission": "business_management", "status": "granted" },
+    { "permission": "instagram_basic", "status": "granted" },
+    { "permission": "instagram_manage_insights", "status": "granted" },
+    { "permission": "instagram_content_publish", "status": "granted" },
+    { "permission": "pages_manage_posts", "status": "declined" },
+    { "permission": "public_profile", "status": "granted" }
+  ]
+}

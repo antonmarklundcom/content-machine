@@ -1,0 +1,10 @@
+{
+  "data": {
+    "status": "SEND_TO_USER_INBOX"
+  },
+  "error": {
+    "code": "ok",
+    "message": "",
+    "log_id": "202610071200000102030405060708FAKE"
+  }
+}

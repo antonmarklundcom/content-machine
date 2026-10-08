@@ -1,0 +1,14 @@
+term,language,meaning_es,meaning_en,say_as,part_of_speech,register,jopara_ok,example,example_translation,review_status,reviewed_by,reviewed_at,source,notes
+nde,gn,"vos; para llamar la atención","you; to get attention",,pronoun,everyday,true,"Nde, esto cambió.","Hey, this changed.",proposed,,,jopara.md,
+che,gn,mi,my,,pronoun,everyday,true,che ra'a,my friend,proposed,,,jopara.md,
+ra'a,gn,"amigo, compañero (informal)","friend, mate (informal)",,noun,slang,true,che ra'a,my friend,proposed,,,jopara.md,
+mba'e,gn,"cosa; qué","thing; what",,noun,everyday,true,,,proposed,,,jopara.md,
+pio,gn,partícula de pregunta,question particle,,particle,everyday,true,¿Y vos pio?,And you?,proposed,,,jopara.md,
+piko,gn,partícula de pregunta,question particle,,particle,everyday,true,¿Vos piko sabías?,Did you know?,proposed,,,jopara.md,
+katu,gn,"pues; suaviza","then; softens a request",,particle,everyday,true,Vení katu.,Come on then.,proposed,,,jopara.md,
+na,gn,suaviza un pedido,softens a request,,particle,everyday,true,Mirá na.,Have a look.,proposed,,,jopara.md,
+ndaje,gn,dicen que,they say that,,particle,everyday,true,Ndaje que tarda noventa días. No es así.,They say it takes ninety days. It doesn't.,proposed,,,jopara.md,
+jaha,gn,vamos,let's go,,verb,everyday,true,"Jaha, te muestro.","Let's go, I'll show you.",proposed,,,jopara.md,
+iporã,gn,"está bien, bueno","it's fine, good",,adjective,everyday,true,"Iporã, sigamos.","Good, let's go on.",proposed,,,jopara.md,
+vai,gn,"feo, malo","ugly, bad",,adjective,everyday,true,Eso es vai.,That's bad.,proposed,,,jopara.md,
+aguyje,gn,gracias,thank you,,interjection,everyday,true,Aguyje por mirar.,Thanks for watching.,proposed,,,jopara.md,"Cierre, no en cada video."

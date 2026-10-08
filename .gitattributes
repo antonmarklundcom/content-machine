@@ -1,0 +1,5 @@
+# Keep required format checks reproducible on Windows and Linux.
+* text=auto eol=lf
+
+# Preserve existing Windows batch launcher bytes.
+*.bat -text

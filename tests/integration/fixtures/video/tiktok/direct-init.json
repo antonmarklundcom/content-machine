@@ -1,0 +1,11 @@
+{
+  "data": {
+    "publish_id": "v_pub_file~v2.7301000000000000002",
+    "upload_url": "https://open-upload.tiktokapis.com/video/?upload_id=7301000000000000002&upload_token=FAKEuploadToken02"
+  },
+  "error": {
+    "code": "ok",
+    "message": "",
+    "log_id": "202610071200000102030405060708FAKE"
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "kind": "youtube#channelListResponse",
+  "etag": "FAKEetag",
+  "pageInfo": {
+    "totalResults": 1,
+    "resultsPerPage": 5
+  },
+  "items": [
+    {
+      "kind": "youtube#channel",
+      "etag": "FAKEetag1",
+      "id": "UCfakeCuentosPy0000000001",
+      "snippet": {
+        "title": "Cuentos PY",
+        "description": "Cuentos para niños en castellano paraguayo.",
+        "customUrl": "@cuentospy",
+        "publishedAt": "2026-01-10T12:00:00Z",
+        "thumbnails": {
+          "default": {
+            "url": "https://yt3.ggpht.com/FAKE=s88",
+            "width": 88,
+            "height": 88
+          }
+        },
+        "country": "PY"
+      }
+    }
+  ]
+}

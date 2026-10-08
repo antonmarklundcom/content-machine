@@ -1,0 +1,50 @@
+{
+  "title": "Tito y el salto chiquito",
+  "series": "Tito",
+  "ageBand": "3-5",
+  "design": { "accent": "#e8a33d" },
+  "referenceIds": ["tito-ref-01"],
+  "coverBrief": "Tito on a lily pad at dusk, warm light.",
+  "pages": [
+    {
+      "id": "S01",
+      "text": {
+        "es": "Tito era un sapito chiquito que vivía junto al arroyo.",
+        "gn": null,
+        "en": "Tito was a tiny little toad who lived by the stream."
+      },
+      "textStatus": { "es": "approved", "gn": "pending-review", "en": "draft" },
+      "artBrief": "A tiny toad by a stream at dawn.",
+      "alt": "Un sapito chiquito junto al arroyo."
+    },
+    {
+      "id": "S02",
+      "text": {
+        "es": "—¿Vos podés saltar tan alto? —preguntó Tito. La garza se rió despacito.",
+        "gn": null
+      },
+      "textStatus": { "es": "approved" },
+      "artBrief": "Tito looks up at a heron.",
+      "alt": "Tito mira a la garza."
+    },
+    {
+      "id": "S03",
+      "text": { "es": "Tito tomó aire, cerró los ojos y saltó.", "gn": null },
+      "textStatus": "pending-review",
+      "artBrief": "Tito mid-jump.",
+      "alt": "Tito salta."
+    },
+    {
+      "id": "S04",
+      "text": {
+        "es": "Fue un salto chiquito, pero era su salto. PENDIENTE: revisar final",
+        "gn": null
+      },
+      "textStatus": { "es": "approved" },
+      "artBrief": "Tito lands, proud.",
+      "alt": "Tito aterriza contento."
+    }
+  ],
+  "questions": ["¿Qué hizo Tito?"],
+  "activity": "Saltá como Tito."
+}

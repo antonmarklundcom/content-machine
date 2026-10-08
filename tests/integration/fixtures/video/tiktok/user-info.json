@@ -1,0 +1,14 @@
+{
+  "data": {
+    "user": {
+      "open_id": "-000FAKEopenIdCuentos01",
+      "display_name": "Cuentos PY",
+      "avatar_url": "https://p16-sign.tiktokcdn-us.com/FAKE.jpeg"
+    }
+  },
+  "error": {
+    "code": "ok",
+    "message": "",
+    "log_id": "202610071200000102030405060708FAKE"
+  }
+}

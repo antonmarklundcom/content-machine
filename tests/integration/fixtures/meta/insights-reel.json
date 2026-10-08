@@ -1,0 +1,53 @@
+{
+  "data": [
+    {
+      "name": "reach",
+      "period": "lifetime",
+      "values": [{ "value": 4000 }],
+      "title": "Accounts reached",
+      "id": "18000000000000001/insights/reach/lifetime"
+    },
+    {
+      "name": "views",
+      "period": "lifetime",
+      "values": [{ "value": 9100 }],
+      "title": "Views",
+      "id": "18000000000000001/insights/views/lifetime"
+    },
+    {
+      "name": "likes",
+      "period": "lifetime",
+      "values": [{ "value": 121 }],
+      "title": "Likes",
+      "id": "18000000000000001/insights/likes/lifetime"
+    },
+    {
+      "name": "comments",
+      "period": "lifetime",
+      "values": [{ "value": 15 }],
+      "title": "Comments",
+      "id": "18000000000000001/insights/comments/lifetime"
+    },
+    {
+      "name": "saved",
+      "period": "lifetime",
+      "values": [{ "value": 60 }],
+      "title": "Saves",
+      "id": "18000000000000001/insights/saved/lifetime"
+    },
+    {
+      "name": "shares",
+      "period": "lifetime",
+      "values": [{ "value": 25 }],
+      "title": "Shares",
+      "id": "18000000000000001/insights/shares/lifetime"
+    },
+    {
+      "name": "ig_reels_avg_watch_time",
+      "period": "lifetime",
+      "values": [{ "value": 7340 }],
+      "title": "Average watch time",
+      "id": "18000000000000001/insights/ig_reels_avg_watch_time/lifetime"
+    }
+  ]
+}

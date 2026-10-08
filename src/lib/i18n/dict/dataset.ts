@@ -1,0 +1,51 @@
+/** Training dataset export from approved recordings (build 5 §3.C). */
+
+export const en = {
+  "dataset.title": "Training datasets",
+  "dataset.intro":
+    "Export approved manual recordings as an LJSpeech/Piper folder on the media drive, to train a voice later. Nothing is uploaded.",
+  "dataset.ownerOnly": "Only the owner can export voice datasets.",
+  "dataset.empty": "No voice profiles with recordings yet.",
+  "dataset.col.voice": "Voice",
+  "dataset.col.language": "Language",
+  "dataset.col.clips": "Approved clips",
+  "dataset.col.hours": "Hours",
+  "dataset.col.unreviewed": "Unreviewed",
+  "dataset.col.consent": "Consent",
+  "dataset.export": "Export",
+  "dataset.exporting": "Exporting…",
+  "dataset.done": "Exported {clips} clips ({minutes} min) to {folder}",
+  "dataset.excluded": "{count} takes left out (too short, too long or no audio).",
+  "dataset.consentBlocked": "Consent not signed",
+  "dataset.recent": "Recent exports",
+  "dataset.noRecent": "No exports yet.",
+  "dataset.error.owner": "Only the owner can export datasets.",
+  "dataset.error.consent": "This voice's consent is not signed.",
+  "dataset.error.failed": "The export failed.",
+  "dataset.guide": "How much audio is enough and how to train: docs/DATASET.md",
+} as const;
+
+export const sv: Record<keyof typeof en, string> = {
+  "dataset.title": "Träningsdataset",
+  "dataset.intro":
+    "Exportera godkända manuella inspelningar som en LJSpeech/Piper-mapp på mediedisken, för att träna en röst senare. Inget laddas upp.",
+  "dataset.ownerOnly": "Bara ägaren kan exportera röstdataset.",
+  "dataset.empty": "Inga röstprofiler med inspelningar än.",
+  "dataset.col.voice": "Röst",
+  "dataset.col.language": "Språk",
+  "dataset.col.clips": "Godkända klipp",
+  "dataset.col.hours": "Timmar",
+  "dataset.col.unreviewed": "Ogranskade",
+  "dataset.col.consent": "Samtycke",
+  "dataset.export": "Exportera",
+  "dataset.exporting": "Exporterar…",
+  "dataset.done": "Exporterade {clips} klipp ({minutes} min) till {folder}",
+  "dataset.excluded": "{count} tagningar utelämnade (för korta, för långa eller utan ljud).",
+  "dataset.consentBlocked": "Samtycke saknas",
+  "dataset.recent": "Senaste exporter",
+  "dataset.noRecent": "Inga exporter än.",
+  "dataset.error.owner": "Bara ägaren kan exportera dataset.",
+  "dataset.error.consent": "Röstens samtycke är inte undertecknat.",
+  "dataset.error.failed": "Exporten misslyckades.",
+  "dataset.guide": "Hur mycket ljud som räcker och hur man tränar: docs/DATASET.md",
+};

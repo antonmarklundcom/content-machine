@@ -1,0 +1,47 @@
+@import "tailwindcss";
+
+/* -------------------------------------------------------------------------
+ * YouTube tool design tokens (ported from the yt repo's globals.css).
+ * Base tokens only — referenced throughout src/components and the
+ * src/app/youtube pages via var(--color-...) and the .surface-* utilities.
+ * ---------------------------------------------------------------------- */
+@theme {
+  --color-surface: oklch(0.18 0.015 250);
+  --color-surface-raised: oklch(0.23 0.018 250);
+  --color-border-subtle: oklch(0.32 0.02 250);
+  --color-ink: oklch(0.95 0.005 250);
+  --color-ink-muted: oklch(0.72 0.015 250);
+  --color-accent: oklch(0.72 0.15 165);
+  --color-accent-ink: oklch(0.18 0.04 165);
+
+  --color-warn: oklch(0.75 0.16 70);
+  --color-danger: oklch(0.68 0.19 25);
+
+  --radius-sm: 6px;
+  --radius-md: 14px;
+  --radius-lg: 28px;
+}
+
+.surface-border {
+  border: 1px solid color-mix(in srgb, var(--color-ink) 10%, transparent);
+}
+
+.surface-card {
+  background-color: var(--color-surface-raised);
+  border-radius: var(--radius-md);
+  box-shadow:
+    0 1px 2px color-mix(in srgb, black 40%, transparent),
+    0 8px 24px color-mix(in srgb, black 25%, transparent);
+}
+
+/* The one app shell: every page sits on the same surface and ink (PLAN.md §1.22). */
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+
+  body {
+    background-color: var(--color-surface);
+    color: var(--color-ink);
+  }
+}

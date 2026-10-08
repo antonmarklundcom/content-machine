@@ -1,0 +1,23 @@
+{
+  "kind": "youtube#video",
+  "etag": "FAKEvideoEtag",
+  "id": "FAKEvid0001",
+  "snippet": {
+    "publishedAt": "2026-10-07T12:00:05Z",
+    "channelId": "UCfakeCuentosPy0000000001",
+    "title": "El yacaré y la luna #Shorts",
+    "description": "…",
+    "categoryId": "1",
+    "liveBroadcastContent": "none",
+    "defaultLanguage": "es",
+    "defaultAudioLanguage": "es"
+  },
+  "status": {
+    "uploadStatus": "uploaded",
+    "privacyStatus": "private",
+    "license": "youtube",
+    "embeddable": true,
+    "publicStatsViewable": true,
+    "selfDeclaredMadeForKids": true
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "access_token": "act.FAKErefreshedAccess00000000000000000000!1234.va",
+  "expires_in": 86400,
+  "open_id": "-000FAKEopenIdCuentos01",
+  "refresh_expires_in": 31535000,
+  "refresh_token": "rft.FAKErefreshToken0000000000000000000000!5678.va",
+  "scope": "user.info.basic,video.upload,video.publish",
+  "token_type": "Bearer"
+}

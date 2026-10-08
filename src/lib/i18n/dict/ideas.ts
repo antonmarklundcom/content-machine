@@ -1,0 +1,43 @@
+/** The ideas workflow (PLAN.md §6.S6): status tabs, actions, citations, visual notes. */
+
+export const en = {
+  "ideas.status.proposed": "Proposed",
+  "ideas.status.approved": "Approved",
+  "ideas.status.posted": "Posted",
+  "ideas.status.rejected": "Rejected",
+  "ideas.tabs.all": "All",
+  "ideas.tabs.label": "Filter ideas by status",
+  "ideas.action.approve": "Approve",
+  "ideas.action.reject": "Reject",
+  "ideas.action.markPosted": "Mark posted",
+  "ideas.action.backToApproved": "Not posted",
+  "ideas.action.reopen": "Reopen",
+  "ideas.action.copyCaption": "Copy caption",
+  "ideas.action.delete": "Delete",
+  "ideas.action.deleteConfirm": "Delete this rejected idea? This cannot be undone.",
+  "ideas.action.failed": "That did not save — reload and try again.",
+  "ideas.postedAt": "Posted {date}",
+  "ideas.citations.title": "Sources",
+  "ideas.visualNotes.title": "Visual notes",
+} as const;
+
+export const sv: Record<keyof typeof en, string> = {
+  "ideas.status.proposed": "Förslag",
+  "ideas.status.approved": "Godkända",
+  "ideas.status.posted": "Publicerade",
+  "ideas.status.rejected": "Avvisade",
+  "ideas.tabs.all": "Alla",
+  "ideas.tabs.label": "Filtrera idéer efter status",
+  "ideas.action.approve": "Godkänn",
+  "ideas.action.reject": "Avvisa",
+  "ideas.action.markPosted": "Markera publicerad",
+  "ideas.action.backToApproved": "Inte publicerad",
+  "ideas.action.reopen": "Öppna igen",
+  "ideas.action.copyCaption": "Kopiera bildtext",
+  "ideas.action.delete": "Radera",
+  "ideas.action.deleteConfirm": "Radera den här avvisade idén? Det går inte att ångra.",
+  "ideas.action.failed": "Det sparades inte — ladda om och försök igen.",
+  "ideas.postedAt": "Publicerad {date}",
+  "ideas.citations.title": "Källor",
+  "ideas.visualNotes.title": "Bildanteckningar",
+};

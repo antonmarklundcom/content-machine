@@ -1,0 +1,24 @@
+# Telegram capture Worker (PLAN.md §1.43).
+name = "content-machine-telegram-capture"
+main = "src/index.ts"
+compatibility_date = "2026-10-08"
+compatibility_flags = ["nodejs_compat"]
+
+# Create a Cloudflare Hyperdrive binding for the app's MariaDB database, then
+# replace this placeholder with the returned ID before any separately approved
+# Worker deployment. No account/binding has been created as part of conversion.
+[[hyperdrive]]
+binding = "HYPERDRIVE"
+id = "00000000000000000000000000000000"
+
+# Secrets, set only in the Cloudflare account (never committed):
+#   TELEGRAM_WEBHOOK_SECRET    the token supplied when registering Telegram's webhook
+#   TELEGRAM_ALLOWED_CHAT_IDS  comma-separated chat ids served by the bot
+#   TELEGRAM_BOT_TOKEN         needed only for the weekly nudge cron
+# Plain optional vars:
+#   TELEGRAM_BRAND_ALIASES     JSON object alias -> brand id
+#   APP_URL                    optional app URL in nudge messages
+
+[triggers]
+# Fridays 12:00 UTC: one unimplemented learn item, no model call.
+crons = ["0 12 * * 5"]

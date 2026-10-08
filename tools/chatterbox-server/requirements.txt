@@ -1,0 +1,10 @@
+# Chatterbox Multilingual server (docs/CHATTERBOX.md). Python 3.11.
+# CPU-only PyTorch: install with the CPU wheel index so pip does not pull the
+# 2+ GB CUDA build (start.bat / start.ps1 do this):
+#   pip install -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cpu
+# UNVERIFIED pins: chatterbox-tts 0.1.4 is the first release with
+# ChatterboxMultilingualTTS and itself pins torch/torchaudio 2.6.0.
+chatterbox-tts==0.1.4
+torch==2.6.0
+torchaudio==2.6.0
+numpy>=1.26,<2.0

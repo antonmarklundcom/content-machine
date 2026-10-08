@@ -1,0 +1,1 @@
+ALTER TABLE "clips" ADD COLUMN "ingest_started_at" timestamp;
