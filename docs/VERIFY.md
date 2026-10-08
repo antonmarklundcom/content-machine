@@ -1,12 +1,12 @@
 # Verification
 
-This conversion uses native MariaDB/MySQL behavior. Verification status for the current conversion is **pending CI and final review**; consult the PR checks and [conversion findings](CONVERSION-FINDINGS.md) for current evidence. This guide describes intended checks, not a claim that they have passed.
+This conversion uses native MariaDB/MySQL behavior. Verification passed on code commit `8025fd7924ed80e8dabb9c6956622c81317a6c6f` in [verified code run](https://github.com/antonmarklundcom/content-machine/actions/runs/37854603317). The final PR head must remain green before merge; [completion report](CONVERSION-REPORT.md) and [findings](CONVERSION-FINDINGS.md) record actual counts, coverage and limitations.
 
 ## Automated checks
 
 `npm run verify` runs typecheck, lint/format checks, unit tests, database integration tests, and a Next.js build. The integration suite requires an explicitly disposable synthetic database with a name ending in `_test` and destructive-test opt-in. Confirm `DATABASE_URL` before setting `ALLOW_DESTRUCTIVE_TEST_DB=1`; never point it at operational data.
 
-CI is expected to provision native MariaDB services and exercise migrations and application queries through `mysql2`. The actual passing result must be read from the current CI run. No CI status is inferred from this document.
+CI provisions native MariaDB services and exercises migrations and application queries through `mysql2`. The actual passing result must be read from the current CI run. No CI status is inferred from this document.
 
 The Hostinger packaging and isolated standalone artifact checks are described in [DEPLOY-HOSTINGER.md](DEPLOY-HOSTINGER.md). Build/package hooks must not connect to a database, migrate, seed, or contact providers.
 

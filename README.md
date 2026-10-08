@@ -32,3 +32,7 @@ The online app mode gates PC-dependent production features. Media paths, CLI int
 | `npm run verify` | Typecheck, lint, unit tests, DB integration tests, and build |
 
 See [docs/VERIFY.md](docs/VERIFY.md) for what each verification layer establishes and the current CI status.
+
+## Conversion result
+
+[PR #1](https://github.com/antonmarklundcom/content-machine/pull/1) contains the completed Hostinger/MariaDB conversion. [verified code run](https://github.com/antonmarklundcom/content-machine/actions/runs/37854603317) passed both native database versions, Windows and physical standalone checks; final PR head checks govern merge. The app is not deployed. Read the [completion report and ranked twenty improvements](docs/CONVERSION-REPORT.md), [confirmed findings](docs/CONVERSION-FINDINGS.md) and [Hostinger guide](docs/DEPLOY-HOSTINGER.md). Configure APP_MODE=online and canonical HTTPS APP_URL explicitly for hosted use.
