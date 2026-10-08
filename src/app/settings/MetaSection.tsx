@@ -1,4 +1,5 @@
 import { headers } from "next/headers";
+import { applicationOrigin } from "@/lib/app-origin";
 
 import type { Locale } from "@/lib/i18n";
 import { translator, type TranslationKey } from "@/lib/i18n";
@@ -51,11 +52,7 @@ const MARK: Record<StepState, { icon: string; cls: string; key: TranslationKey }
 };
 
 async function currentOrigin(): Promise<string> {
-  const h = await headers();
-  const host = h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000";
-  const proto =
-    h.get("x-forwarded-proto") ?? (/^(localhost|127\.|\[::1\])/.test(host) ? "http" : "https");
-  return `${proto.split(",")[0].trim()}://${host.split(",")[0].trim()}`;
+  return applicationOrigin({ url: "http://localhost:3000", headers: await headers() });
 }
 
 export async function MetaSection({

@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { applicationOrigin } from "@/lib/app-origin";
 import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth/token";
 
 /**
@@ -10,23 +11,31 @@ import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth/token";
  * separate account system for the brand side to fall back to.
  *
  * Signature-only: middleware runs on every request, and a database round trip
- * here would put Postgres in the path of static assets. A valid signature
+ * here would put the database in the path of static assets. A valid signature
  * proves the token was minted by this app and has not expired — pages that
  * need the *user* still call getSession(), which re-reads the row.
  */
 export async function middleware(request: NextRequest): Promise<NextResponse> {
+  let login: URL;
+  try {
+    login = new URL("/youtube/login", applicationOrigin(request));
+  } catch {
+    return new NextResponse("Application configuration is incomplete.", {
+      status: 503,
+      headers: { "Cache-Control": "no-store" },
+    });
+  }
   const secret = process.env.SESSION_SECRET;
   // A missing secret must fail closed. Failing open would silently unlock the
   // whole app the first time someone forgets an env var on a redeploy.
   if (!secret || secret.length < 32) {
-    return NextResponse.redirect(new URL("/youtube/login", request.url));
+    return NextResponse.redirect(login);
   }
 
   const token = request.cookies.get(SESSION_COOKIE)?.value;
   if (await verifySessionToken(token, secret)) return NextResponse.next();
 
-  const url = new URL("/youtube/login", request.url);
-  return NextResponse.redirect(url);
+  return NextResponse.redirect(login);
 }
 
 export const config = {

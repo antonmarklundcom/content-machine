@@ -1,3 +1,5 @@
+import { applicationOrigin } from "@/lib/app-origin";
+
 /**
  * Meta app settings (PLAN.md §1.49, §5.O12), read from the environment at call
  * time so the Settings page can change them without a restart.
@@ -68,8 +70,5 @@ export function redirectUri(origin: string): string {
  * `http://localhost:3000` locally, the public host behind a proxy online.
  */
 export function requestOrigin(request: Request): string {
-  const url = new URL(request.url);
-  const host = request.headers.get("x-forwarded-host") ?? request.headers.get("host") ?? url.host;
-  const proto = request.headers.get("x-forwarded-proto") ?? url.protocol.replace(/:$/, "");
-  return `${proto.split(",")[0].trim()}://${host.split(",")[0].trim()}`;
+  return applicationOrigin(request);
 }

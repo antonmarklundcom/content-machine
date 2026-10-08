@@ -54,6 +54,7 @@ const port = await (async () => {
   return address.port;
 })();
 
+const publicOrigin = "https://content-machine.synthetic.invalid";
 const env = {
   PATH: process.env.PATH ?? "",
   SystemRoot: process.env.SystemRoot,
@@ -67,6 +68,8 @@ const env = {
   GEMINI_FAKE: "1",
   VOICE_FAKE: "1",
   AI_PROVIDER: "gemini",
+  APP_MODE: "online",
+  APP_URL: publicOrigin,
 };
 if ("DATABASE_URL" in env) throw new Error("Standalone smoke must not receive DATABASE_URL.");
 const child = spawn(process.execPath, [server], {
@@ -113,27 +116,29 @@ try {
   }
   // Middleware redirects browser/private routes to login. Do not follow it
   // and mistake the public login's 200 for a successful private-media response.
-  const privateAsset = await fetch(`${base}/api/media/asset/1`, { redirect: "manual" });
+  const privateAsset = await fetch(`${base}/api/media/asset/1`, {
+    redirect: "manual",
+    headers: {
+      host: "content-machine.synthetic.invalid",
+      "x-forwarded-host": "untrusted.synthetic.invalid",
+      "x-forwarded-proto": "http",
+    },
+  });
   const location = privateAsset.headers.get("location");
   const redirectUrl = location === null ? null : new URL(location, base);
-  // NextURL normalizes 127.0.0.1 to localhost. Accept only that loopback
-  // alias on this exact synthetic server port and the fixed login path.
+  // A reverse-proxy request must use the configured public origin, never
+  // the bind host/internal port or arbitrary forwarded headers.
   const loginRedirect =
     privateAsset.status === 307 &&
     redirectUrl !== null &&
-    redirectUrl.protocol === "http:" &&
-    ["127.0.0.1", "localhost"].includes(redirectUrl.hostname) &&
-    redirectUrl.port === String(port) &&
-    redirectUrl.pathname === "/youtube/login" &&
-    redirectUrl.search === "" &&
-    redirectUrl.hash === "";
-  if (privateAsset.status !== 401 && !loginRedirect) {
+    redirectUrl.href === `${publicOrigin}/youtube/login`;
+  if (!loginRedirect) {
     throw new Error(
-      `Unauthenticated media must return 401 or redirect only to local login; got ${privateAsset.status} (location ${location ?? "none"}).`,
+      `Unauthenticated hosted media must redirect to the configured public login; got ${privateAsset.status} (location ${location ?? "none"}).`,
     );
   }
   console.log(
-    "Validated standalone mysql2 closure, static asset serving, login form, and private-media denial without DATABASE_URL.",
+    "Validated standalone mysql2 closure, static asset serving, login form, and canonical public-origin private-media denial without DATABASE_URL.",
   );
 } finally {
   child.kill("SIGTERM");
