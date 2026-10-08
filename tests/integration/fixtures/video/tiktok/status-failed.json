@@ -1,0 +1,11 @@
+{
+  "data": {
+    "status": "FAILED",
+    "fail_reason": "file_format_check_failed"
+  },
+  "error": {
+    "code": "ok",
+    "message": "",
+    "log_id": "202610071200000102030405060708FAKE"
+  }
+}

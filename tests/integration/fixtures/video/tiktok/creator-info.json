@@ -1,0 +1,17 @@
+{
+  "data": {
+    "creator_avatar_url": "https://p16-sign.tiktokcdn-us.com/FAKE.jpeg",
+    "creator_username": "cuentospy",
+    "creator_nickname": "Cuentos PY",
+    "privacy_level_options": ["SELF_ONLY"],
+    "comment_disabled": false,
+    "duet_disabled": false,
+    "stitch_disabled": true,
+    "max_video_post_duration_sec": 600
+  },
+  "error": {
+    "code": "ok",
+    "message": "",
+    "log_id": "202610071200000102030405060708FAKE"
+  }
+}

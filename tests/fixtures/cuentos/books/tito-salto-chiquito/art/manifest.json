@@ -1,0 +1,38 @@
+[
+  {
+    "planId": "S01",
+    "file": "art/S01-a.png",
+    "jobId": "job-1",
+    "credits": 2,
+    "createdAt": "2026-09-01T10:00:00Z",
+    "selected": true
+  },
+  {
+    "planId": "S01",
+    "file": "art/S01-b.png",
+    "jobId": "job-2",
+    "credits": 2,
+    "createdAt": "2026-09-02T10:00:00Z",
+    "status": "rejected"
+  },
+  {
+    "planId": "S02",
+    "path": "books/tito-salto-chiquito/art/S02.png",
+    "jobId": "job-3",
+    "status": "selected"
+  },
+  {
+    "planId": "S03",
+    "file": "art/S03-old.png",
+    "jobId": "job-4",
+    "createdAt": "2026-09-01T10:00:00Z"
+  },
+  {
+    "planId": "S03",
+    "file": "art/S03-new.png",
+    "jobId": "job-5",
+    "createdAt": "2026-09-03T10:00:00Z"
+  },
+  { "planId": "S04", "file": "art/S04.png", "jobId": "job-6", "selected": true },
+  { "planId": "cover", "file": "art/cover.png", "jobId": "job-7" }
+]

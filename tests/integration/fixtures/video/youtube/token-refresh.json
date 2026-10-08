@@ -1,0 +1,6 @@
+{
+  "access_token": "ya29.FAKErefreshedAccess00000000000",
+  "expires_in": 3599,
+  "scope": "https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly",
+  "token_type": "Bearer"
+}

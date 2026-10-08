@@ -1,0 +1,18 @@
+{
+  "data": [
+    {
+      "name": "reach",
+      "period": "day",
+      "title": "Accounts reached",
+      "total_value": { "value": 2100 },
+      "id": "17841400000000001/insights/reach/day"
+    },
+    {
+      "name": "profile_views",
+      "period": "day",
+      "title": "Profile views",
+      "total_value": { "value": 77 },
+      "id": "17841400000000001/insights/profile_views/day"
+    }
+  ]
+}

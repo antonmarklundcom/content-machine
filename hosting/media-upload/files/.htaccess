@@ -1,0 +1,23 @@
+# Public media only: nothing under files/ is ever executed or listed (PLAN.md §5.O10.2).
+Options -Indexes -ExecCGI
+<IfModule mod_php.c>
+  php_flag engine off
+</IfModule>
+<IfModule mod_php7.c>
+  php_flag engine off
+</IfModule>
+RemoveHandler .php .phtml .php3 .php4 .php5 .php7 .php8 .phar .phps .pht .cgi .pl .py .sh
+RemoveType .php .phtml .php3 .php4 .php5 .php7 .php8 .phar .phps .pht
+
+# Deny everything, then allow exactly the media types upload.php writes.
+<FilesMatch ".*">
+  Require all denied
+</FilesMatch>
+<FilesMatch "\.(?i:jpe?g|png|webp|gif|mp4|mov)$">
+  Require all granted
+</FilesMatch>
+
+<IfModule mod_headers.c>
+  Header set X-Content-Type-Options "nosniff"
+  Header set Cache-Control "public, max-age=604800"
+</IfModule>

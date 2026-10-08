@@ -1,0 +1,20 @@
+# content-engine media endpoint (PLAN.md §1.41). See README.md.
+Options -Indexes
+
+# Apache under FastCGI drops the Authorization header unless told to pass it on.
+# (LiteSpeed, which Hostinger runs, passes it anyway.)
+<IfModule mod_setenvif.c>
+  SetEnvIf Authorization "(.+)" HTTP_AUTHORIZATION=$1
+</IfModule>
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+</IfModule>
+
+# Only the two endpoints are scripts anyone may call.
+<FilesMatch "\.(?i:php\d?|phtml|phar|ini|md|json|log)$">
+  Require all denied
+</FilesMatch>
+<FilesMatch "^(upload|delete)\.php$">
+  Require all granted
+</FilesMatch>

@@ -1,0 +1,11 @@
+{
+  "data": {
+    "status": "PROCESSING_UPLOAD",
+    "uploaded_bytes": 0
+  },
+  "error": {
+    "code": "ok",
+    "message": "",
+    "log_id": "202610071200000102030405060708FAKE"
+  }
+}

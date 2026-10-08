@@ -1,0 +1,25 @@
+{
+  "data": [
+    {
+      "id": "18000000000000004",
+      "caption": "Image: fees 2026",
+      "media_type": "IMAGE",
+      "media_product_type": "FEED",
+      "permalink": "https://www.instagram.com/p/ImgFee4/",
+      "timestamp": "2026-08-01T09:00:00+0000",
+      "like_count": 40,
+      "comments_count": 2
+    },
+    {
+      "id": "18000000000000005",
+      "caption": "Too old for a 90-day sync",
+      "media_type": "IMAGE",
+      "media_product_type": "FEED",
+      "permalink": "https://www.instagram.com/p/OldOne5/",
+      "timestamp": "2026-05-01T09:00:00+0000",
+      "like_count": 5,
+      "comments_count": 0
+    }
+  ],
+  "paging": { "cursors": { "before": "QVFIUb5", "after": "QVFIUa5" } }
+}

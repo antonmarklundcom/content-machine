@@ -1,0 +1,10 @@
+{
+  "data": [
+    {
+      "name": "page_impressions_unique",
+      "period": "day",
+      "values": [{ "value": 340, "end_time": "2026-09-27T07:00:00+0000" }],
+      "id": "111000000000002/insights/page_impressions_unique/day"
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "kind": "youtube#thumbnailSetResponse",
+  "etag": "FAKEthumbEtag",
+  "items": [
+    {
+      "default": {
+        "url": "https://i.ytimg.com/vi/FAKEvid0001/default.jpg",
+        "width": 120,
+        "height": 90
+      }
+    }
+  ]
+}

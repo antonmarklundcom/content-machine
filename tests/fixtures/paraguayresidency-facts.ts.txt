@@ -1,0 +1,214 @@
+/**
+ * Every legal or financial figure on any of the three sites lives here
+ * (plan §1.10 / §4.11). Nothing is written as a bare number in JSX or MDX.
+ *
+ * Until Anton's legal partner verifies an entry (`verified: true` plus
+ * `verifiedBy`/`verifiedOn`), pages render `hedged` — wording that points the
+ * reader at a written answer instead of quoting a figure we cannot stand behind.
+ * Public sources disagree on the Investor Pass minimum (USD 70k / 150k / 200k
+ * all appear), which is exactly why this file exists.
+ */
+
+/**
+ * Copy for one locale, or a per-locale map. `en` is always required; a brand
+ * whose locale is missing falls back to `en` (plan §5.4.2). The fallback is
+ * deliberate and unlike the i18n layer's: a fact is a legal statement, and a
+ * correct English sentence beats a blank space or a machine translation.
+ */
+export type LocalizedText = string | ({ en: string } & Partial<Record<FactLocale, string>>);
+
+export type FactLocale = 'en' | 'es' | 'pt' | 'sv';
+
+export interface Fact {
+  /** Stable key used as `<Fact k="…" />`. */
+  key: string;
+  /** Short human label, e.g. for the admin verification screen. */
+  label: string;
+  /** The label in the reader's language, for an article's sources list. */
+  title?: LocalizedText;
+  /** The figure/claim as it should read ONCE verified. */
+  display: LocalizedText;
+  /** What renders while `verified` is false. Never contains a bare number. */
+  hedged: LocalizedText;
+  verified: boolean;
+  verifiedBy?: string;
+  verifiedOn?: string;
+  /** Where the unverified value came from; the resolution text is the goal. */
+  sources: string[];
+  /**
+   * Published from a cited source ahead of the owner's sign-off (Anton's
+   * decision, 2026-09-26: answer engines cannot quote "confirm on your call",
+   * so a figure with a named source and a checked date goes live). The page
+   * shows `display` plus the citation; `verified` still means "signed off".
+   * `docs/facts-verification.md` lists every sourced fact awaiting sign-off.
+   */
+  sourced?: { label: LocalizedText; url?: string; checkedOn: string };
+  note?: string;
+}
+
+export const facts = {
+  "documents.police_certificate_validity": {
+    "key": "documents.police_certificate_validity",
+    "label": "Police certificate — recency and acceptance",
+    "title": {
+      "en": "Police certificate — recency and acceptance",
+      "es": "Certificado de antecedentes penales — vigencia y aceptación",
+      "pt": "Certificado de antecedentes criminais — validade e aceitação",
+      "sv": "Polisintyg — giltighetstid och godkännande"
+    },
+    "display": {
+      "en": "issued no more than 90 days before you file, apostilled or legalised, from your country of origin (and from any country you lived in during the last 3 years)",
+      "es": "emitido como máximo 90 días antes de presentar la solicitud, apostillado o legalizado, del país de origen (y de cualquier país donde hayas vivido en los últimos 3 años)",
+      "pt": "emitida no máximo 90 dias antes do protocolo, apostilada ou legalizada, do país de origem (e de qualquer país onde você tenha morado nos últimos 3 anos)",
+      "sv": "utfärdat högst 90 dagar innan du lämnar in ansökan, apostillerat eller legaliserat, från ursprungslandet (och från varje land du bott i under de senaste 3 åren)"
+    },
+    "hedged": {
+      "en": "the applicable certificate recency window and acceptance conditions must be confirmed for your issuing country, route and filing stage",
+      "es": "la vigencia y las condiciones de aceptación del certificado deben confirmarse según tu país emisor, tu ruta y la etapa de tu trámite",
+      "pt": "a validade e as condições de aceitação da certidão devem ser confirmadas conforme seu país emissor, sua rota e a etapa do seu processo",
+      "sv": "giltighetstiden och villkoren för godkännande av intyget måste bekräftas utifrån ditt utfärdande land, din väg och var i processen du befinner dig"
+    },
+    "verified": false,
+    "sourced": {
+      "label": "DNM requisitos Residencia Temporal (Ley 6984/2022), 2025–26 checklist",
+      "checkedOn": "2026-09-26",
+      "url": "https://migraciones.gov.py/residencia-temporal/"
+    },
+    "sources": [
+      "https://migraciones.gov.py/residencia-temporal/",
+      "https://migraciones.gov.py/wp-content/uploads/2025/10/Residencia-Temporal-Ley-6984-1025.pdf",
+      "https://paraguaysovereign.com/residency/police-certificate/",
+      "https://moveparaguay.com/en/full-guide/"
+    ],
+    "note": "Research 2026-09-26 (medium confidence): The DNM checklist (primary) says the certificate must be original, 'vigente', apostilled/legalised, national/federal level, plus certificates from any country of residence in the last 3 years; under-14s exempt. It does NOT print a day count in the search snippets. The 90-day window (counted from issue date, not apostille date) comes from agency guides; some guides say 6 months for foreign certificates. Since late 2025 DNM/Interpol also verifies directly with the issuing country, which can add delay. Owner: confirm the 90-day practice with the filing lawyer before publishing; the 3-year prior-residence rule is primary-sourced."
+  },
+  "investorpass.min_investment_usd": {
+    "key": "investorpass.min_investment_usd",
+    "label": "Investor Pass — minimum qualifying investment",
+    "title": {
+      "en": "Investor Pass — minimum qualifying investment",
+      "es": "Investor Pass — inversión mínima requerida",
+      "pt": "Investor Pass — investimento mínimo exigido",
+      "sv": "Investor Pass — lägsta godkända investering"
+    },
+    "display": {
+      "en": "from USD 70,000 (productive business with at least 5 formal jobs); USD 150,000–200,000 on the passive routes",
+      "es": "desde USD 70.000 (empresa productiva con al menos 5 empleos formales); entre USD 150.000 y 200.000 en las vías pasivas",
+      "pt": "a partir de USD 70.000 (empresa produtiva com pelo menos 5 empregos formais); de USD 150.000 a 200.000 nas rotas passivas",
+      "sv": "från USD 70 000 (produktivt företag med minst 5 formella anställningar); USD 150 000–200 000 för de passiva vägarna"
+    },
+    "hedged": {
+      "en": "from a qualifying investment amount we confirm in writing for your case",
+      "es": "desde un monto de inversión que confirmamos por escrito para tu caso",
+      "pt": "a partir de um valor de investimento que confirmamos por escrito para o seu caso",
+      "sv": "från ett investeringsbelopp som vi bekräftar skriftligt för ditt fall"
+    },
+    "verified": false,
+    "sourced": {
+      "label": "MIC Resolución N.º 0283/2026 (Constancia de Inversionista Extranjero)",
+      "checkedOn": "2026-09-26",
+      "url": "https://www.mic.gov.py/wp-content/uploads/2026/04/Res.-N-0283.2026_Constancia-de-Inversionista.pdf"
+    },
+    "sources": [
+      "https://www.mic.gov.py/wp-content/uploads/2026/04/Res.-N-0283.2026_Constancia-de-Inversionista.pdf",
+      "https://www.mic.gov.py/paraguay-fortalece-la-atraccion-de-inversiones-extranjeras-con-el-nuevo-investor-pass/",
+      "https://www.rediex.gov.py/paraguay-fortalece-la-atraccion-de-inversiones-extranjeras-con-el-nuevo-investor-pass/",
+      "https://cdn-www.lanacionpy.arcpublishing.com/negocios/2026/08/09/con-el-investor-pass-paraguay-busca-atraer-capital-extranjero-con-inversiones-desde-usd-70000/",
+      "https://www.fragomen.com/insights/paraguay-new-investor-pass-expands-permanent-residence-options.html"
+    ],
+    "note": "Research 2026-09-26 (high confidence): The old 70k/150k/200k 'conflict' is resolved: they are different routes under one resolution. 70k = productive (jobs + business plan); 150k = tourism; 200k = real estate and financial instruments. Consistent across MIC, REDIEX (gov) and La Nación. Primary PDF could not be fetched (proxy) — figures taken from MIC/REDIEX official news and search excerpts of the PDF. Pages that promise '70k with no jobs' are wrong; the 70k route requires jobs."
+  },
+  "investorpass.launch_date": {
+    "key": "investorpass.launch_date",
+    "label": "Investor Pass — programme launch",
+    "title": {
+      "en": "Investor Pass — programme launch",
+      "es": "Investor Pass — lanzamiento del programa",
+      "pt": "Investor Pass — lançamento do programa",
+      "sv": "Investor Pass — programmets lansering"
+    },
+    "display": {
+      "en": "launched on 17 April 2026 (Resolution 0283/2026, signed 21 April 2026)",
+      "es": "lanzado el 17 de abril de 2026 (Resolución 0283/2026, firmada el 21 de abril de 2026)",
+      "pt": "lançado em 17 de abril de 2026 (Resolução 0283/2026, assinada em 21 de abril de 2026)",
+      "sv": "lanserat den 17 april 2026 (resolution 0283/2026, undertecknad den 21 april 2026)"
+    },
+    "hedged": "programme launch and current status confirmed in writing for your case",
+    "verified": false,
+    "sourced": {
+      "label": "MIC/DNM joint launch, 17 Apr 2026; Res. MIC 0283/2026",
+      "checkedOn": "2026-09-26",
+      "url": "https://migraciones.gov.py/paraguay-investor-pass-nueva-herramienta-para-facilitar-la-inversion-extranjera-en-el-pais/"
+    },
+    "sources": [
+      "https://migraciones.gov.py/paraguay-investor-pass-nueva-herramienta-para-facilitar-la-inversion-extranjera-en-el-pais/",
+      "https://www.hoy.com.py/nacionales/2026/04/17/mic-y-migraciones-lanzan-el-paraguay-investor-pass",
+      "https://www.paraguaytv.gov.py/2026/04/23/paraguay-investor-pass-nuevo-instrumento-legal-para-atraer-capitales-extranjeros/",
+      "https://www.mic.gov.py/wp-content/uploads/2026/04/Res.-N-0283.2026_Constancia-de-Inversionista.pdf"
+    ],
+    "note": "Research 2026-09-26 (medium confidence): Public launch event 17 April 2026 (Diario HOY, DNM). IMI Daily reports the resolution signed by Minister Marco Riquelme on 21 April 2026; one guide says rules in force 28 April 2026, another says effective 16 April. Safest public wording: 'April 2026'. Owner: read the resolution's date/vigencia clause in the PDF."
+  },
+  "investorpass.validity_years": {
+    "key": "investorpass.validity_years",
+    "label": "Investor Pass — residency validity",
+    "title": {
+      "en": "Investor Pass — residency validity",
+      "es": "Investor Pass — vigencia de la residencia",
+      "pt": "Investor Pass — validade da residência",
+      "sv": "Investor Pass — uppehållstillståndets giltighet"
+    },
+    "display": {
+      "en": "permanent residency with no expiry; the resident card is renewed every 10 years",
+      "es": "residencia permanente sin vencimiento; el carnet de residente se renueva cada 10 años",
+      "pt": "residência permanente sem vencimento; a carteira de residente é renovada a cada 10 anos",
+      "sv": "permanent uppehållstillstånd utan slutdatum; uppehållskortet förnyas vart tionde år"
+    },
+    "hedged": "a long-validity permanent card — we confirm the exact term in writing before you file",
+    "verified": false,
+    "sourced": {
+      "label": "Ley 6984/2022 (permanent = indefinite); DNM 'Renovación de Carnet Permanente'",
+      "checkedOn": "2026-09-26",
+      "url": "https://migraciones.gov.py/renovacion-de-carnet-permanente/"
+    },
+    "sources": [
+      "https://migraciones.gov.py/renovacion-de-carnet-permanente/",
+      "https://www.bacn.gov.py/leyes-paraguayas/10973/ley-n-6984-de-migraciones",
+      "https://www.elnacional.com.py/nacionales/todo-lo-hay-saber-sobre-nueva-ley-migraciones-n36782"
+    ],
+    "note": "Research 2026-09-26 (medium confidence): Many agency pages say 'a 10-year permanent residency' — that conflates the card with the status. Permanent residency is indefinite ('residir por tiempo indeterminado'); the carnet (and the cédula) are renewed every 10 years under Ley 6984. Renewal fee G 468,308 from 1 Jul 2026. Holders under old Ley 978/1996 are not required to renew. Presence rule still applies (see permanent.presence_rule)."
+  },
+  "permanent.presence_rule": {
+    "key": "permanent.presence_rule",
+    "label": "Permanent residency — presence requirement",
+    "title": {
+      "en": "Permanent residency — presence requirement",
+      "es": "Residencia permanente — requisito de presencia",
+      "pt": "Residência permanente — requisito de permanência",
+      "sv": "Permanent uppehållstillstånd — krav på närvaro"
+    },
+    "display": {
+      "en": "at least one entry every three years — an unjustified absence of more than 3 consecutive years cancels permanent residency",
+      "es": "al menos una entrada cada tres años: una ausencia injustificada de más de 3 años consecutivos cancela la residencia permanente",
+      "pt": "pelo menos uma entrada a cada três anos: uma ausência injustificada de mais de 3 anos consecutivos cancela a residência permanente",
+      "sv": "minst en inresa vart tredje år – en oförklarad frånvaro på mer än 3 år i följd upphäver det permanenta uppehållstillståndet"
+    },
+    "hedged": {
+      "en": "a minimum-presence rule applies — we tell you exactly what it means for your travel pattern",
+      "es": "existe una regla de presencia mínima — te decimos exactamente qué significa para tu forma de viajar",
+      "pt": "há uma exigência de presença mínima — explicamos o que ela significa para seus planos de viagem",
+      "sv": "ett krav på minsta närvaro gäller — vi förklarar vad det innebär för dina resplaner"
+    },
+    "verified": false,
+    "sourced": {
+      "label": "Ley 6984/2022, art. 55; Res. DNM 376/2026 (13 May 2026)",
+      "checkedOn": "2026-09-26",
+      "url": "https://www.bacn.gov.py/leyes-paraguayas/10973/ley-n-6984-de-migraciones"
+    },
+    "sources": [
+      "https://www.bacn.gov.py/leyes-paraguayas/10973/ley-n-6984-de-migraciones",
+      "https://www.ip.gov.py/ip/2026/04/08/unjustified-absence-from-the-country-leads-to-revocation-of-residency-for-foreigners-officials-remind/",
+      "https://liberation.travel/paraguay-residency-absence-rules-376-2026/"
+    ],
+    "note": "Research 2026-09-26 (high confidence): Rule is consecutive absence, not days per year; one entry resets the clock. Some guides cite art. 54 — the cancellation causes are in art. 55 per most sources; check article number in the law text. NEW IN 2026: Res. DNM 376/2026 (signed 13 May 2026 by director Jorge Kronawetter, repeals Res. 018/2023 and 120/2023) makes the Dirección de Control de Permanencia sweep the register twice a year and cancel by administrative act; prior authorisation for longer absences can be requested (art. 6). Absences justified by DNM authorisation do not count."
+  }
+} as const satisfies Record<string, Fact>;

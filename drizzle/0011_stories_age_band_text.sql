@@ -1,0 +1,1 @@
+ALTER TABLE "stories" ALTER COLUMN "age_band" SET DATA TYPE text;

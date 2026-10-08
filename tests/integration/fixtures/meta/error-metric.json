@@ -1,0 +1,8 @@
+{
+  "error": {
+    "message": "(#100) Incompatible metric (follows) with this media",
+    "type": "OAuthException",
+    "code": 100,
+    "fbtrace_id": "AFakeTrace1"
+  }
+}

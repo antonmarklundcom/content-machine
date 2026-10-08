@@ -1,0 +1,9 @@
+{
+  "error": {
+    "message": "The media could not be fetched from this uri: https://media.example.com/files/2026/09/x.jpg",
+    "type": "OAuthException",
+    "code": 9004,
+    "error_subcode": 2207052,
+    "fbtrace_id": "AbCdEf0124"
+  }
+}

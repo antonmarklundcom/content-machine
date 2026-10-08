@@ -1,0 +1,38 @@
+{
+  "data": [
+    {
+      "id": "18000000000000001",
+      "caption": "Reel: 3 myths about residency",
+      "media_type": "VIDEO",
+      "media_product_type": "REELS",
+      "permalink": "https://www.instagram.com/reel/ReelAbc1/",
+      "timestamp": "2026-09-20T15:00:00+0000",
+      "like_count": 120,
+      "comments_count": 14
+    },
+    {
+      "id": "18000000000000002",
+      "caption": "Carousel: the 5 documents",
+      "media_type": "CAROUSEL_ALBUM",
+      "media_product_type": "FEED",
+      "permalink": "https://www.instagram.com/p/CarouXyz2/",
+      "timestamp": "2026-09-10T09:00:00+0000",
+      "like_count": 80,
+      "comments_count": 9
+    },
+    {
+      "id": "18000000000000003",
+      "caption": "Not a post the app knows about",
+      "media_type": "IMAGE",
+      "media_product_type": "FEED",
+      "permalink": "https://www.instagram.com/p/Unknown3/",
+      "timestamp": "2026-09-05T09:00:00+0000",
+      "like_count": 10,
+      "comments_count": 0
+    }
+  ],
+  "paging": {
+    "cursors": { "before": "QVFIUb4", "after": "QVFIUa4" },
+    "next": "https://graph.facebook.com/v23.0/17841400000000001/media?fields=id&limit=50&after=QVFIUa4&access_token=EAAFAKElongLivedUserToken0000000000000"
+  }
+}
