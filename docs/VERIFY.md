@@ -1,21 +1,43 @@
 # Verification
 
-This conversion uses native MariaDB/MySQL behavior. Verification passed on code commit `8025fd7924ed80e8dabb9c6956622c81317a6c6f` in [verified code run](https://github.com/antonmarklundcom/content-machine/actions/runs/37854603317). The final PR head must remain green before merge; [completion report](CONVERSION-REPORT.md) and [findings](CONVERSION-FINDINGS.md) record actual counts, coverage and limitations.
+The Hostinger/MariaDB conversion is merged in [PR #1](https://github.com/antonmarklundcom/content-machine/pull/1). Its [final PR-head CI run](https://github.com/antonmarklundcom/content-machine/actions/runs/37856383516) passed native MariaDB 10.11/11.4, Windows, SQL dump/restore and isolated Linux standalone checks before merge. [Completion report](CONVERSION-REPORT.md) and [findings](CONVERSION-FINDINGS.md) record coverage and limitations.
 
-## Automated checks
+## Current owner policy — 8 October 2026
 
-`npm run verify` runs typecheck, lint/format checks, unit tests, database integration tests, and a Next.js build. The integration suite requires an explicitly disposable synthetic database with a name ending in `_test` and destructive-test opt-in. Confirm `DATABASE_URL` before setting `ALLOW_DESTRUCTIVE_TEST_DB=1`; never point it at operational data.
+GitHub CI runs only when explicitly dispatched. Pushes and PRs do not start it automatically, and no repository branch rule requires GitHub status checks. Agents run checks appropriate to the change, inspect the diff/conflicts and record the exact validated revision plus actual pass/fail/skip results before merging. Sol/Claude review does not replace executing tests. The completed conversion's CI requirement is historical; this policy governs subsequent work.
 
-CI provisions native MariaDB services and exercises migrations and application queries through `mysql2`. The actual passing result must be read from the current CI run. No CI status is inferred from this document.
+Documentation and workflow-trigger changes need focused formatting/configuration validation and diff review. Code changes need affected regression tests and applicable type/lint/build checks. Database changes need disposable native MariaDB migration/query/concurrency checks; recovery changes need an actual synthetic dump and restoration. Hosting/runtime packaging changes need an isolated physical Linux artifact. If the necessary environment is missing, use manual native CI or establish it locally before merging the affected high-risk change.
 
-The Hostinger packaging and isolated standalone artifact checks are described in [DEPLOY-HOSTINGER.md](DEPLOY-HOSTINGER.md). Build/package hooks must not connect to a database, migrate, seed, or contact providers.
+## Local automated checks
 
-## Manual checks and live integrations
+Use npm.cmd on Windows if PowerShell blocks npm:
 
-A successful synthetic test does not verify a real Hostinger account, its database version, provider credentials, external billing, OAuth callbacks, or real publishing. The repository has not been deployed. Do not run paid or live-provider probes as part of routine verification.
+```sh
+npm ci
+npm run audit:production
+npm run typecheck
+npm run typecheck:worker
+npm run lint
+npm test
+npm run test:worker
+```
 
-Windows-specific paths, Task Scheduler, media storage, CLI access, rendering, and offline worker behavior require local PC checks. Hosted `APP_MODE=online` does not establish that PC-bound tools or workers can run on the hosted server.
+Run only the applicable subset for a narrow change. After confirming a dedicated disposable MariaDB URL and setting ALLOW_DESTRUCTIVE_TEST_DB=1, use npm run test:db. The database name must end in _test and the host must be loopback or explicitly test-allowlisted. Never use operational data. npm run verify combines app types, lint/format, unit tests, native database tests and build; it does not include the separate worker or production-audit commands.
 
-## Historical verification records
+## Optional manual native CI
 
-The original Content Engine verification instructions referred to PostgreSQL/Neon and its historical CI setup. They are preserved as source history and are not current instructions for this repo. See [SOURCE-PROVENANCE.md](SOURCE-PROVENANCE.md), [AUDIT-FIXES-2026-10-08.md](AUDIT-FIXES-2026-10-08.md), and the repository Git history.
+The retained workflow provisions MariaDB 10.11 and 11.4 and runs clean installation, production audit, app/worker checks, full native tests, SQL backup/restoration, production build and physical standalone validation. It also retains Windows checks. Explicitly start it from Actions → CI → Run workflow, or select the branch with:
+
+```sh
+gh workflow run ci.yml --repo antonmarklundcom/content-machine --ref codex/your-branch
+```
+
+Record the run's exact head SHA and actual results. Do not infer success from workflow dispatch. [GitHub manual-workflow documentation](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow).
+
+The artifact steps are described in [DEPLOY-HOSTINGER.md](DEPLOY-HOSTINGER.md). Build/package hooks must not connect to operational databases, migrate, seed or contact providers.
+
+## Live checks and historical records
+
+Synthetic verification does not certify the actual Hostinger plan, persistent media, account credentials, OAuth callbacks, billing or live publishing. The repository is not deployed. Paid/live probes require separate authorization. PC-only tools remain dependent on local configuration.
+
+Earlier PostgreSQL/Neon and conversion-CI instructions are historical. See [source provenance](SOURCE-PROVENANCE.md) and [original audit](AUDIT-FIXES-2026-10-08.md). To restore automatic CI later, restore the push/main and pull_request triggers through a reviewed change and update this policy.
