@@ -102,7 +102,7 @@ test("updateScriptBody validates, patches title/language, bumps updated_at", asy
   const script = await draft();
   await db
     .update(schema.scripts)
-    .set({ updatedAt: sql`now() - interval '1 hour'` })
+    .set({ updatedAt: sql`date_sub(now(), interval 1 hour)` })
     .where(eq(schema.scripts.id, script.id));
 
   const next = { ...BODY, hook: "New hook" };
@@ -137,7 +137,7 @@ test("setScriptStatus stamps on the way in, keeps on repeat, clears on the way o
   // Backdate, then repeat: a repeat keeps the original stamp.
   await db
     .update(schema.scripts)
-    .set({ recordedAt: sql`now() - interval '2 days'` })
+    .set({ recordedAt: sql`date_sub(now(), interval 2 day)` })
     .where(eq(schema.scripts.id, script.id));
   const stamped = (await getScript(script.id))!.recordedAt!;
   const again = await setScriptStatus(script.id, "recorded");

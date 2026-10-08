@@ -52,7 +52,7 @@ async function video(sourceId: number | null, viewCount: number | null, daysAgo:
     title: `Video ${videoSeq}`,
     channelTitle: sourceId === null ? null : `Channel ${sourceId}`,
     viewCount,
-    publishedAt: daysAgo === null ? null : sql`now() - make_interval(days => ${daysAgo})`,
+    publishedAt: daysAgo === null ? null : sql`date_sub(now(), interval ${daysAgo} day)`,
     durationSeconds: 600,
   });
   return row;

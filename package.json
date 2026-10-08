@@ -52,7 +52,8 @@
     "build:hostinger": "npm run build",
     "start:hostinger": "npm start",
     "artifact:check": "node scripts/validate-hostinger-artifact.mjs",
-    "postbuild": "node scripts/prepare-hostinger.mjs"
+    "postbuild": "node scripts/prepare-hostinger.mjs",
+    "typecheck:worker": "tsc --project workers/telegram-capture/tsconfig.json --noEmit"
   },
   "dependencies": {
     "@google/genai": "^2.19.0",
@@ -86,7 +87,7 @@
     "pg": "^8.23.0"
   },
   "engines": {
-    "node": ">=22.9.0",
+    "node": ">=22.13.0",
     "npm": ">=11.17.0"
   }
 }

@@ -4,6 +4,9 @@ import type { Connection, QueryResult, ResultSetHeader, RowDataPacket } from "my
 import type { Query } from "./handler";
 import { LEARN_COMMIT_SQL, LEARN_DONE_SQL, SAVE_SQL } from "./handler";
 
+/** Worker upsert replies require changed-row counts; the app CAS pool keeps FOUND_ROWS. */
+export const WORKER_CONNECTION_FLAGS = ["-FOUND_ROWS"];
+
 /** Convert mysql2's row/packet result protocol into the Worker handler's row protocol. */
 export function queryOnConnection(connection: Pick<Connection, "execute">): Query {
   return async (text, params) => {

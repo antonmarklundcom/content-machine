@@ -1,10 +1,10 @@
+import { buildVoiceRunPrompt } from "./voice-prompt";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { StreamParser } from "./stream";
 import { downloadCommand } from "./prompt";
 import {
-  buildVoiceRunPrompt,
   creditsPerMinute,
   engineSpeaks,
   estimateLineCredits,

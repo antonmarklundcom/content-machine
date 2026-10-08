@@ -109,7 +109,7 @@ test("an expired lease is taken over; a live one is not", async () => {
   // A crashed holder never releases: simulate it by backdating the expiry.
   await db
     .update(schema.leases)
-    .set({ expiresAt: sql`now() - interval '1 second'` })
+    .set({ expiresAt: sql`date_sub(now(), interval 1 second)` })
     .where(eq(schema.leases.name, "job"));
   const takeover = await acquireLease("job", 60_000);
   assert.ok(takeover, "an expired lease is anyone's");
@@ -153,19 +153,19 @@ test("the poll run fails clips stuck in ingesting for over 15 minutes", async ()
       url: "https://youtu.be/stuck000001",
       platform: "youtube",
       status: "ingesting",
-      savedAt: sql`now() - interval '20 minutes'`,
+      savedAt: sql`date_sub(now(), interval 20 minute)`,
     },
     {
       url: "https://youtu.be/fresh000001",
       platform: "youtube",
       status: "ingesting",
-      savedAt: sql`now() - interval '1 minute'`,
+      savedAt: sql`date_sub(now(), interval 1 minute)`,
     },
     {
       url: "https://youtu.be/idle0000001",
       platform: "youtube",
       status: "unprocessed",
-      savedAt: sql`now() - interval '2 hours'`,
+      savedAt: sql`date_sub(now(), interval 2 hour)`,
     },
   ]);
 
@@ -190,8 +190,8 @@ test("the reaper times a retried old clip from its ingest start, not its save", 
       url: "https://youtu.be/retried0001",
       platform: "youtube",
       status: "ingesting",
-      savedAt: sql`now() - interval '30 days'`,
-      ingestStartedAt: sql`now() - interval '1 minute'`,
+      savedAt: sql`date_sub(now(), interval 30 day)`,
+      ingestStartedAt: sql`date_sub(now(), interval 1 minute)`,
     },
     {
       // Saved a minute ago but its ingest started 20 minutes back cannot
@@ -199,8 +199,8 @@ test("the reaper times a retried old clip from its ingest start, not its save", 
       url: "https://youtu.be/started0001",
       platform: "youtube",
       status: "ingesting",
-      savedAt: sql`now() - interval '1 minute'`,
-      ingestStartedAt: sql`now() - interval '20 minutes'`,
+      savedAt: sql`date_sub(now(), interval 1 minute)`,
+      ingestStartedAt: sql`date_sub(now(), interval 20 minute)`,
     },
   ]);
 

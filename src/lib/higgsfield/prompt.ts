@@ -4,7 +4,7 @@ import type { HiggsfieldJobKind } from "@/db/schema";
 import { COMMAND_FOR } from "./config";
 
 /**
- * The prompt and argv for one headless Claude Code run (build 4 §1.14). Pure:
+ * The server-side prompt and argv for one headless Claude Code run (build 4 §1.14):
  * the brief text is generated server-side by brief.ts and passed in, so the
  * CLI never needs a session cookie to fetch it.
  *

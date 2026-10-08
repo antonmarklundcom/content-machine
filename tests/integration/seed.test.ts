@@ -15,7 +15,7 @@ import { resetTables, teardown } from "./setup";
  * `vercel-build` runs `db:seed` on every deploy (§1.14), so "insert-only" is
  * not a style preference — it is the reason a deploy cannot quietly revert a
  * brand's voice to whatever this file said months ago. That guarantee is an
- * `on conflict do nothing` in real SQL, which is what this checks.
+ * `insert ... on duplicate key` in real MariaDB, which is what this checks.
  */
 
 beforeEach(resetTables);

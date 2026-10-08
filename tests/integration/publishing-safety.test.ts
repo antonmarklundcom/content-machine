@@ -1,12 +1,14 @@
 import { insertReturning } from "@/db/mutations";
 import assert from "node:assert/strict";
 import { after, beforeEach, test } from "node:test";
+import { createPool } from "mysql2/promise";
 import { createRequire } from "node:module";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { createHash } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { db } from "@/db";
+import { databaseOptions } from "@/db/driver";
 import { assets, brands, posts, postAssets, socialAccounts, users, type Post } from "@/db/schema";
 import { assetOriginal } from "@/lib/media/originals";
 import { generateEncryptionKey } from "@/lib/crypto";
@@ -27,6 +29,7 @@ import { resetTables, teardown } from "./setup";
 
 const NOW = new Date("2026-10-08T12:00:00Z"),
   PAST = new Date(NOW.getTime() - 60_000);
+const ddlPool = createPool(databaseOptions(process.env.DATABASE_URL));
 const FAST = { poll: { tries: 1, delayMs: 0 } };
 let ownerId: number, accountId: number, ownerCookie: string;
 const require = createRequire(import.meta.url);
@@ -88,7 +91,10 @@ beforeEach(async () => {
   });
   accountId = account.id;
 });
-after(teardown);
+after(async () => {
+  await ddlPool.end();
+  await teardown();
+});
 async function post(overrides: Partial<typeof posts.$inferInsert> = {}) {
   const [p] = await insertReturning(db, posts, {
     accountId,
@@ -172,15 +178,13 @@ test("BUG03 bookkeeping and permalink failures preserve confirmed publication; r
   const a = await image(),
     p = await post({ format: "image_post" });
   await db.insert(postAssets).values({ postId: p.id, assetId: a.id, position: 1, role: "slide" });
-  await db.execute(
-    sql.raw(
-      "create function safety_fail_used() returns trigger language plpgsql as $$ begin if NEW.status='used' then raise exception 'synthetic bookkeeping fault'; end if; return NEW; end; $$",
-    ),
-  );
-  await db.execute(
-    sql.raw(
-      "create trigger safety_fail_used before update on assets for each row execute function safety_fail_used()",
-    ),
+  await ddlPool.query(
+    `CREATE TRIGGER safety_fail_used BEFORE UPDATE ON assets FOR EACH ROW
+     BEGIN
+       IF NEW.status = 'used' THEN
+         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'synthetic bookkeeping fault';
+       END IF;
+     END`,
   );
   try {
     const api = provider({ permalinkFailure: true });
@@ -198,23 +202,19 @@ test("BUG03 bookkeeping and permalink failures preserve confirmed publication; r
     await publishDue({ now: NOW, fetch: api.fetch, ...FAST });
     assert.equal(api.creates, 1);
   } finally {
-    await db.execute(
-      sql.raw("drop trigger safety_fail_used on assets; drop function safety_fail_used()"),
-    );
+    await ddlPool.query("DROP TRIGGER IF EXISTS safety_fail_used");
   }
 });
 test("BUG03 failure while storing the accepted provider ID becomes reconciliation-only", async () => {
   const p = await post(),
     api = provider();
-  await db.execute(
-    sql.raw(
-      "create function safety_fail_confirmation() returns trigger language plpgsql as $$ begin if NEW.external_media_id is not null then raise exception 'synthetic confirmation fault'; end if; return NEW; end; $$",
-    ),
-  );
-  await db.execute(
-    sql.raw(
-      "create trigger safety_fail_confirmation before update on posts for each row execute function safety_fail_confirmation()",
-    ),
+  await ddlPool.query(
+    `CREATE TRIGGER safety_fail_confirmation BEFORE UPDATE ON posts FOR EACH ROW
+     BEGIN
+       IF NEW.external_media_id IS NOT NULL THEN
+         SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'synthetic confirmation fault';
+       END IF;
+     END`,
   );
   try {
     assert.equal(
@@ -228,11 +228,7 @@ test("BUG03 failure while storing the accepted provider ID becomes reconciliatio
     );
     assert.equal(api.creates, 1);
   } finally {
-    await db.execute(
-      sql.raw(
-        "drop trigger safety_fail_confirmation on posts; drop function safety_fail_confirmation()",
-      ),
-    );
+    await ddlPool.query("DROP TRIGGER IF EXISTS safety_fail_confirmation");
   }
 });
 test("BUG03 unknown provider acceptance is blocked for manual and due retry", async () => {

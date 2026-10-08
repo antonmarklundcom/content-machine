@@ -1721,12 +1721,12 @@
       "indexes": {
         "facts_brand_topic_idx": {
           "name": "facts_brand_topic_idx",
-          "columns": ["brand_id", "topic"],
+          "columns": ["brand_id"],
           "isUnique": false
         },
         "facts_family_topic_idx": {
           "name": "facts_family_topic_idx",
-          "columns": ["family_id", "topic"],
+          "columns": ["family_id"],
           "isUnique": false
         },
         "facts_family_key_language_idx": {

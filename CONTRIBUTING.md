@@ -1,5 +1,11 @@
 # Contributing
 
+This repository is the Content Machine conversion of the fixed Content Engine
+source revision. Historical phase instructions and PostgreSQL references in
+inherited logs describe that source project. Current runtime and database work
+targets MariaDB/MySQL; see [the conversion plan](docs/CONVERSION-PLAN.md) and
+[conversion findings](docs/CONVERSION-FINDINGS.md).
+
 This repo is built in phases by Claude Code sessions, one phase per session and
 per PR, from the prompt files in `prompts/`. `PLAN.md` holds the decisions (§1),
 the phases (§5, §6) and the build log index (§9). A human contributor follows
@@ -54,7 +60,9 @@ fails `npm run typecheck`. Use keys through `t()`.
 ## Adding an integration test
 
 Integration tests live in `tests/integration/<name>.test.ts` and run real SQL
-against the Postgres in `DATABASE_URL` (never Neon — they wipe every table):
+against the explicitly disposable MariaDB database in `DATABASE_URL`. The suite
+can truncate tables: use only a dedicated database whose name ends in `_test`,
+with `ALLOW_DESTRUCTIVE_TEST_DB=1` set after confirming the URL:
 
 ```ts
 import assert from "node:assert/strict";

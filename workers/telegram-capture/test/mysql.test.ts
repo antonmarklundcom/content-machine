@@ -3,7 +3,11 @@ import { test } from "node:test";
 
 import type { Connection } from "mysql2/promise";
 import { LEARN_DONE_SQL, SAVE_SQL } from "../src/handler";
-import { queryOnConnection } from "../src/mysql";
+import { queryOnConnection, WORKER_CONNECTION_FLAGS } from "../src/mysql";
+
+test("Worker connections disable FOUND_ROWS so a duplicate cannot report newly saved", () => {
+  assert.deepEqual(WORKER_CONNECTION_FLAGS, ["-FOUND_ROWS"]);
+});
 
 test("MySQL save result preserves new-versus-existing reply and exact URL identity", async () => {
   const calls: { sql: string; params: unknown[] }[] = [];
@@ -27,7 +31,15 @@ test("MySQL save result preserves new-versus-existing reply and exact URL identi
   assert.deepEqual(await query(SAVE_SQL, ["https://example.test/clip", "other", "note"]), [
     { id: 42, created: false },
   ]);
-  assert.deepEqual(calls.map((call) => call.sql), [SAVE_SQL, "SELECT id, url FROM clips WHERE id = ?", SAVE_SQL, "SELECT id, url FROM clips WHERE id = ?"]);
+  assert.deepEqual(
+    calls.map((call) => call.sql),
+    [
+      SAVE_SQL,
+      "SELECT id, url FROM clips WHERE id = ?",
+      SAVE_SQL,
+      "SELECT id, url FROM clips WHERE id = ?",
+    ],
+  );
 });
 
 test("MySQL save refuses a duplicate URL hash that points to a different URL", async () => {
@@ -58,5 +70,8 @@ test("MySQL command result reads the qualifying learn row after the update", asy
   assert.deepEqual(await queryOnConnection(connection)(LEARN_DONE_SQL, [9]), [
     { id: 9, title: "A small step" },
   ]);
-  assert.deepEqual(calls, [LEARN_DONE_SQL, "SELECT id, title FROM clips WHERE id = ? AND purpose = 'learn'"]);
+  assert.deepEqual(calls, [
+    LEARN_DONE_SQL,
+    "SELECT id, title FROM clips WHERE id = ? AND purpose = 'learn'",
+  ]);
 });

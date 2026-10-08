@@ -215,7 +215,7 @@ async function postedScript(
     language: "en",
     status,
     body: sampleScriptBody(),
-    postedAt: status === "posted" ? sql`now() - make_interval(days => ${postedDaysAgo})` : null,
+    postedAt: status === "posted" ? sql`date_sub(now(), interval ${postedDaysAgo} day)` : null,
   });
   return row;
 }
@@ -224,7 +224,7 @@ test("a posted script is flagged once a fact on a source it cites changes after 
   const fact = await createFact(BRAND.id, { ...factFields, sourceUrl: `${SOURCE_URL}/` });
   await db
     .update(schema.facts)
-    .set({ updatedAt: sql`now() - make_interval(days => 30)` })
+    .set({ updatedAt: sql`date_sub(now(), interval 30 day)` })
     .where(eq(schema.facts.id, fact.id));
   const recent = await postedScript("Posted after the change", 10);
   await postedScript("Not posted yet", 0, "ready");
@@ -234,7 +234,7 @@ test("a posted script is flagged once a fact on a source it cites changes after 
     language: "en",
     status: "posted",
     body: sampleScriptBody(),
-    postedAt: sql`now() - make_interval(days => 40)`,
+    postedAt: sql`date_sub(now(), interval 40 day)`,
   });
 
   assert.deepEqual(
@@ -273,7 +273,7 @@ test("a script whose body has no sources array is simply not flagged", async () 
     language: "en",
     status: "posted",
     body: { version: 0 },
-    postedAt: sql`now() - make_interval(days => 5)`,
+    postedAt: sql`date_sub(now(), interval 5 day)`,
   });
   assert.deepEqual(await brandScriptsNeedingCorrection(BRAND.id), []);
 });
@@ -364,7 +364,7 @@ async function upload(sourceId: number, viewCount: number | null, daysAgo: numbe
     sourceId,
     title: `Title ${seq}`,
     viewCount,
-    publishedAt: sql`now() - make_interval(days => ${daysAgo})`,
+    publishedAt: sql`date_sub(now(), interval ${daysAgo} day)`,
     durationSeconds: 600,
   });
   return row;

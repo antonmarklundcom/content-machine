@@ -266,7 +266,17 @@ test("the media route rejects directory junctions that escape the media root", a
 });
 
 test("“Use this one” stores a file from the folder, refuses anything else, and clears", async () => {
-  await db.execute(`select setval(pg_get_serial_sequence('scripts', 'id'), 6, true)`);
+  // Reserve six stable fixture ids so the generated draft's media folder is 7
+  // on MariaDB as it was in the original PostgreSQL fixture.
+  await db.insert(schema.scripts).values(
+    Array.from({ length: 6 }, (_, index) => ({
+      id: index + 1,
+      brandId: "sequence-fixture",
+      title: `Reserved ${index + 1}`,
+      language: "en",
+      body: { version: 1 },
+    })),
+  );
   const { id } = await draftFromListing();
   assert.equal(id, 7, "the script whose media folder the fixture made");
 

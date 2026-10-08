@@ -6,7 +6,7 @@
 
 import { createConnection } from "mysql2/promise";
 import { handleWebhook, type Env, type Query } from "./handler";
-import { queryOnConnection } from "./mysql";
+import { queryOnConnection, WORKER_CONNECTION_FLAGS } from "./mysql";
 import { runScheduledNudge } from "./nudge";
 
 function queryFor(env: Env): Query {
@@ -22,8 +22,12 @@ function queryFor(env: Env): Query {
       charset: "utf8mb4",
       timezone: "Z",
       disableEval: true,
+      flags: WORKER_CONNECTION_FLAGS,
     });
     try {
+      await connection.query(
+        "SET SESSION time_zone = '+00:00', SESSION sql_mode = 'STRICT_TRANS_TABLES,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION'",
+      );
       return await queryOnConnection(connection)(text, params);
     } finally {
       await connection.end();
@@ -33,7 +37,8 @@ function queryFor(env: Env): Query {
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
-    if (!env.HYPERDRIVE) return new Response("HYPERDRIVE binding is not configured", { status: 500 });
+    if (!env.HYPERDRIVE)
+      return new Response("HYPERDRIVE binding is not configured", { status: 500 });
     return handleWebhook(request, env, queryFor(env));
   },
 

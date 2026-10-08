@@ -1,3 +1,4 @@
+import { buildVoiceRunPrompt } from "./voice-prompt";
 import { insertReturning, updateReturning } from "@/db/mutations";
 import "server-only";
 import { isOnlineDeploy, PcOnlyError } from "@/lib/pc-only";
@@ -32,7 +33,6 @@ import { ownedByWorker, staleWorkerJob, workerIdentity } from "./ownership";
 import { outputFolders } from "./output-folders";
 import { StreamParser } from "./stream";
 import {
-  buildVoiceRunPrompt,
   parseVoiceManifest,
   scanVoiceMarkers,
   VoiceMarkerCollector,

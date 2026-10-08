@@ -8,6 +8,7 @@ export function workerQueryFromPool(pool: Pool): Query {
   return async (text, params) => {
     const connection = await pool.getConnection();
     try {
+      await connection.query("SET SESSION time_zone = '+00:00'");
       return await queryOnConnection(connection)(text, params);
     } finally {
       connection.release();

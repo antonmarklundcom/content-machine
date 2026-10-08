@@ -1221,8 +1221,9 @@ export const facts = mysqlTable(
       .default(sql`(current_timestamp(3))`),
   },
   (t) => [
-    index("facts_brand_topic_idx").on(t.brandId, t.topic),
-    index("facts_family_topic_idx").on(t.familyId, t.topic),
+    // Keep unbounded topic text intact; bounded identity indexes fit InnoDB.
+    index("facts_brand_topic_idx").on(t.brandId),
+    index("facts_family_topic_idx").on(t.familyId),
     // The import's upsert key (§1.48). Partial: hand-made facts have no key.
     uniqueIndex("facts_family_key_language_idx").on(t.familyId, t.externalKey, t.language),
   ],

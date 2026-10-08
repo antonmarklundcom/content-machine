@@ -34,7 +34,8 @@ import { setConnectionStatus, saveConnection, getConnection } from "@/lib/publis
 import { generateEncryptionKey } from "@/lib/crypto";
 import { cancelJob, reapJobs } from "@/lib/higgsfield/run";
 import { finalizeHiggsfieldVoiceJob } from "@/lib/voice/higgsfield-takes";
-import { buildVoiceRunPrompt, voiceArgument } from "@/lib/higgsfield/voice";
+import { buildVoiceRunPrompt } from "@/lib/higgsfield/voice-prompt";
+import { voiceArgument } from "@/lib/higgsfield/voice";
 import { insertAnalysis } from "@/lib/analysis/run";
 
 import { resetTables, teardown } from "./setup";

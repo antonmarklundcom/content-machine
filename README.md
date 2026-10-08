@@ -6,7 +6,7 @@ The initial app and feature history came from a fixed Content Engine revision. S
 
 ## Local setup
 
-Use [docs/LOCAL-SETUP.md](docs/LOCAL-SETUP.md). You need Node.js 22.9+, npm 11.17+, a reachable MariaDB database, and a local `.env`. Migrations and seed commands are explicit operator actions; builds and server startup do not run them.
+Use [docs/LOCAL-SETUP.md](docs/LOCAL-SETUP.md). You need Node.js 22.13+, npm 11.17+, a reachable MariaDB database, and a local `.env`. Migrations and seed commands are explicit operator actions; builds and server startup do not run them.
 
 The online app mode gates PC-dependent production features. Media paths, CLI integrations, ffmpeg tools, and offline workers depend on their own local configuration and do not become hosted capabilities merely by setting `APP_MODE=online`.
 

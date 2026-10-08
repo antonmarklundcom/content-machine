@@ -792,8 +792,8 @@ CREATE INDEX `comment_drafts_account_status_idx` ON `comment_drafts` (`account_i
 CREATE INDEX `competitor_posts_competitor_posted_idx` ON `competitor_posts` (`competitor_id`,`posted_at`);--> statement-breakpoint
 CREATE INDEX `competitor_reports_brand_idx` ON `competitor_reports` (`brand_id`,`created_at`);--> statement-breakpoint
 CREATE INDEX `content_gaps_brand_status_idx` ON `content_gaps` (`brand_id`,`status`);--> statement-breakpoint
-CREATE INDEX `facts_brand_topic_idx` ON `facts` (`brand_id`,`topic`);--> statement-breakpoint
-CREATE INDEX `facts_family_topic_idx` ON `facts` (`family_id`,`topic`);--> statement-breakpoint
+CREATE INDEX `facts_brand_topic_idx` ON `facts` (`brand_id`);--> statement-breakpoint
+CREATE INDEX `facts_family_topic_idx` ON `facts` (`family_id`);--> statement-breakpoint
 CREATE INDEX `glossary_terms_review_idx` ON `glossary_terms` (`review_status`);--> statement-breakpoint
 CREATE INDEX `higgsfield_jobs_status_idx` ON `higgsfield_jobs` (`status`);--> statement-breakpoint
 CREATE INDEX `higgsfield_jobs_target_idx` ON `higgsfield_jobs` (`target_ref`);--> statement-breakpoint

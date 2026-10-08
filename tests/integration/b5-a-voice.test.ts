@@ -16,7 +16,8 @@ import {
 } from "@/lib/higgsfield-voice.actions";
 import { resetPreflightCache } from "@/lib/higgsfield/preflight";
 import { getJob, settleRuns } from "@/lib/higgsfield/run";
-import { buildVoiceRunPrompt, voiceArgument, voiceOutFile } from "@/lib/higgsfield/voice";
+import { buildVoiceRunPrompt } from "@/lib/higgsfield/voice-prompt";
+import { voiceArgument, voiceOutFile } from "@/lib/higgsfield/voice";
 import { sampleScriptBody } from "@/lib/scripts/fixture";
 import { narrationFolder } from "@/lib/storage/paths";
 import { getScene, getStory } from "@/lib/stories/data";

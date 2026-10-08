@@ -15,7 +15,7 @@ import { resetTables, teardown } from "./setup";
  *
  * `saveClip` is one upsert carrying three separate promises — never a second
  * row, never a clobbered note, and an honest `created` flag — and all three are
- * decided by `on conflict do update` and the unique index under it. This is the
+ * decided by MariaDB's duplicate-key update and the unique index under it. This is the
  * only place they can actually be checked.
  */
 

@@ -253,7 +253,7 @@ export async function listGaps(
     .where(and(eq(contentGaps.brandId, brandId), inArray(contentGaps.status, statuses)))
     .orderBy(
       sql`${contentGaps.status} = 'planned'`,
-      sql`${contentGaps.score} desc nulls last`,
+      desc(contentGaps.score),
       desc(contentGaps.createdAt),
       desc(contentGaps.id),
     );

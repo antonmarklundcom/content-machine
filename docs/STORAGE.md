@@ -1,7 +1,9 @@
 # Where the media lives
 
 Photos, videos and thumbnails are **files on a drive, never rows in the
-database** (PLAN.md §1.41). Neon holds only text and links. There are three
+database**. MariaDB holds application data and media metadata/links; file bytes
+stay outside SQL. The inherited source documentation referred to Neon, which
+is historical and is not used by this runtime. There are three
 places a file can be:
 
 | Tier | Where | What for | Set up by |

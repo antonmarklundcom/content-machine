@@ -1,6 +1,6 @@
 # Local setup
 
-This guide runs the converted Content Machine on a Windows PC. It needs Node.js 22.9 or newer, npm 11.17.0 or newer, Git, and a reachable MariaDB/InnoDB database. PostgreSQL/Neon instructions from the source repository are historical; see [source provenance](SOURCE-PROVENANCE.md) and [the audit record](AUDIT-FIXES-2026-10-08.md).
+This guide runs the converted Content Machine on a Windows PC. It needs Node.js 22.13 or newer, npm 11.17.0 or newer, Git, and a reachable MariaDB/InnoDB database. PostgreSQL/Neon instructions from the source repository are historical; see [source provenance](SOURCE-PROVENANCE.md) and [the audit record](AUDIT-FIXES-2026-10-08.md).
 
 ## 1. Get the code and install dependencies
 
@@ -13,7 +13,7 @@ git --version
 npm ci
 ```
 
-The repository declares Node `>=22.9.0` and npm `>=11.17.0`.
+The repository declares Node `>=22.13.0` and npm `>=11.17.0`.
 
 ## 2. Configure the database and app
 

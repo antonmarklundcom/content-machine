@@ -154,7 +154,7 @@ async function video(sourceId: number, title: string, views: number, daysAgo: nu
     title,
     channelTitle: "Rival Drilling",
     viewCount: views,
-    publishedAt: sql`now() - make_interval(days => ${daysAgo})`,
+    publishedAt: sql`date_sub(now(), interval ${daysAgo} day)`,
     durationSeconds: 600,
   });
   return row;

@@ -29,7 +29,7 @@ const BRANDS = [
   { id: "flytta", name: "Flytta", domain: "f.test", niche: "n", market: "sweden", platforms: [] },
 ];
 
-const pool = createPool(databaseOptions(process.env.DATABASE_URL));
+const pool = createPool({ ...databaseOptions(process.env.DATABASE_URL), flags: ["-FOUND_ROWS"] });
 const mysqlQuery: Query = workerQueryFromPool(pool);
 
 beforeEach(async () => {
@@ -193,4 +193,14 @@ test("the Telegram Worker's upsert works against the native MariaDB clips table"
   const fromApp = await saveClip({ url: "https://instagram.com/reel/t?utm_source=x" });
   assert.ok(fromApp.ok);
   assert.equal(fromApp.created, false);
+});
+
+test("an unchanged Worker duplicate is Already saved, including no-note captures", async () => {
+  const { SAVE_SQL } = await import("../../workers/telegram-capture/src/handler");
+  const args = ["https://worker.test/unchanged", "other", null];
+  const first = await mysqlQuery(SAVE_SQL, args);
+  const repeat = await mysqlQuery(SAVE_SQL, args);
+  assert.equal(first[0].created, true);
+  assert.equal(repeat[0].created, false);
+  assert.equal(first[0].id, repeat[0].id);
 });

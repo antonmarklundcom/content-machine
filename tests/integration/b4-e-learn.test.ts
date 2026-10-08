@@ -90,7 +90,7 @@ async function addClip(values: Partial<typeof schema.clips.$inferInsert> & { url
 const getClip = async (id: number) =>
   (await db.select().from(schema.clips).where(eq(schema.clips.id, id)))[0]!;
 
-const pool = createPool(databaseOptions(process.env.DATABASE_URL));
+const pool = createPool({ ...databaseOptions(process.env.DATABASE_URL), flags: ["-FOUND_ROWS"] });
 const mysqlQuery: Query = async (text, params) => {
   const [rows] = await pool.execute(text, params as never[]);
   return Array.isArray(rows) ? (rows as Record<string, unknown>[]) : [];
