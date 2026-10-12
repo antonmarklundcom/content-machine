@@ -1,0 +1,114 @@
+# Fix prompt — Content Machine improvement report of 12 October 2026
+
+Paste this whole file as the first message of a new Claude Code session running **Opus 5.5** on the `antonmarklundcom/content-machine` repository. Delete any task block below that you do not want; the IDs match `docs/improvement-report-2026-10-12.md`.
+
+---
+
+You are working in the `content-machine` repository. Read `AGENTS.md`, `docs/VERIFY.md` and `docs/improvement-report-2026-10-12.md` first. The report holds the evidence (file and line) for every task below; do not re-audit, apply the fixes.
+
+## Rules
+
+1. **Branch:** create `fix/improvement-report-2026-10-12` from the latest `origin/main`. Never commit to `main`.
+2. **One commit per task**, in the order listed, message `IMP-NN: <what changed>` followed by one short paragraph on why. Nothing else goes in that commit. If a task turns out to be impossible or wrong, skip it and say so in the final report; do not partially apply it.
+3. **Before every commit** run, from the repository root, and all must pass:
+   ```sh
+   npm run typecheck
+   npm run typecheck:worker
+   npm run lint
+   npm test
+   npm run test:worker
+   ```
+   For a task that touches `next.config.ts`, `src/middleware.ts`, `src/app/layout.tsx`, `src/app/manifest.ts`, `package.json` or anything under `scripts/`, also run `npm run build` and then:
+   ```sh
+   node scripts/package-hostinger.mjs /tmp/cm-artifact && node scripts/validate-hostinger-artifact.mjs /tmp/cm-artifact && rm -rf /tmp/cm-artifact
+   ```
+   For a task that adds or changes an integration test under `tests/integration/`, run `npm run test:db` against a disposable loopback MariaDB whose database name ends in `_test`, with `ALLOW_DESTRUCTIVE_TEST_DB=1`. If no such database is available, record "test:db skipped: no database" for that task; never point it at any other database.
+4. **Generated files are never hand-edited.** That means `package-lock.json` and `workers/telegram-capture/package-lock.json` (only npm writes them), everything under `drizzle-mysql/` (only `drizzle-kit generate`), and `.next/`. `npm run lint` must leave the tree unchanged; use `npm run format` only on files you created or edited.
+5. **No secrets.** Never write a real token, password, URL with credentials, email address or account id into the repository. Test fixtures use obviously fake values.
+6. **No new dependencies** in any `package.json`. The Worker lockfile in IMP-10 records existing declared dependencies only.
+7. **No scope creep.** Do not touch the database schema, migrations, spend/lease/publication logic, provider adapters or anything not named in a task. Do not rename files or reformat untouched code. If a task needs a decision only the owner can make, do what the task says to assume and flag it in the report.
+8. **Do not deploy, publish, open a pull request, call a paid provider or change any connected account.** Push the branch when all commits are done: `git push -u origin fix/improvement-report-2026-10-12`.
+9. Do not spawn subagents on Fable or Mythos-class models.
+
+## Tasks
+
+### IMP-01 — HTTP security headers (P1, S)
+
+In `next.config.ts` add an `async headers()` returning, for `source: "/(.*)"`:
+`X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy: camera=(), geolocation=(), microphone=(self)`, and `Strict-Transport-Security: max-age=31536000` (no `includeSubDomains`, no `preload`). Do not add a Content-Security-Policy in this task. Keep the comment style of the file. Extend `scripts/validate-hostinger-artifact.mjs` so its existing login-page request also asserts these five headers are present. Mention in the `docs/DEPLOY-HOSTINGER.md` "Canonical public origin" section, in one sentence, that HSTS is sent by the app and assumes TLS terminates in front of it.
+
+### IMP-03 — Preserve the destination through login (P1, S)
+
+- `src/middleware.ts`: when redirecting to `/youtube/login`, append `next=<pathname + search>` unless the path is `/` or already `/youtube/login`.
+- New pure module `src/lib/auth/next-path.ts` exporting `safeNextPath(value: unknown, fallback = "/youtube"): string`: accept only a string that starts with a single `/`, does not start with `//`, contains no `\`, and parses with `new URL(value, "http://x")` to the same path; anything else returns the fallback. Unit tests in `src/lib/auth/next-path.test.ts` for: valid path with query, `//evil.example`, `https://evil.example`, `/\evil`, empty, undefined.
+- `src/app/youtube/login/page.tsx` reads `searchParams.next` and passes it to `LoginForm`; `src/components/LoginForm.tsx` sends it as a hidden `next` field; `src/lib/auth/actions.ts` redirects to `safeNextPath(formData.get("next"))`. The already-signed-in redirect on the login page uses the same helper.
+- Extend the existing middleware regression test (search for `CM-BUG-27` under `src/`) with one case asserting the `next` parameter on the redirect.
+
+### IMP-09 — Keep the private tool out of search engines (P2, S)
+
+Add `robots: { index: false, follow: false }` to the root `metadata` in `src/app/layout.tsx`. Add `src/app/robots.ts` returning `rules: { userAgent: "*", disallow: "/" }`. Add `robots.txt` to the negative lookahead in the `matcher` of `src/middleware.ts` so the file is reachable without a session, and add one line to the matcher's doc comment explaining why.
+
+### IMP-02 — Throttle login attempts (P1, M)
+
+New pure module `src/lib/auth/throttle.ts`: an in-memory sliding window keyed by a string, `recordFailure(key, now)`, `isBlocked(key, now)`, `clear(key)`, with defaults of 10 failures per 15 minutes and automatic pruning of expired entries; export the defaults as constants. Unit tests in `src/lib/auth/throttle.test.ts`: below limit passes, at limit blocks, expiry unblocks, clear unblocks, keys are independent.
+In `src/lib/auth/actions.ts`, before the database lookup, compute two keys: `ip:<first x-forwarded-for value, else "unknown">` (read via `headers()` from `next/headers`) and `email:<lower-cased email>`. If either is blocked, still run the same `verifyPassword` call against the stored hash so timing does not change, then return the existing generic error message. On failure record both keys; on success clear both. Add a comment stating the limiter is per process and resets on restart, and one sentence in `KNOWN-ISSUES.md` under "Conversion and readiness" saying the same. Do not change the error text.
+
+### IMP-05 — Root error, not-found and global-error pages (P2, S)
+
+Add `src/app/error.tsx`, `src/app/not-found.tsx` and `src/app/global-error.tsx`. Mirror the structure, styling classes and dictionary keys of `src/app/youtube/error.tsx` and `src/app/youtube/not-found.tsx`; if those keys are namespaced to the YouTube section, reuse them anyway rather than inventing copy, and note it in the report. `global-error.tsx` must render its own `<html>` and `<body>` and may use plain English from the existing dictionary only.
+
+### IMP-14 — Explicit authentication in four API routes (P2, S)
+
+In `src/app/api/brands/route.ts`, `src/app/api/ideas/route.ts`, `src/app/api/ideas/[id]/route.ts` and `src/app/api/ingest/route.ts`, add as the first statement of each handler the same check used in `src/app/api/generate/route.ts`: `getSession()` and a 401 JSON `{ error: "Sign in first." }` when null. In `src/app/api/ideas/[id]/route.ts` wrap `request.json()` in try/catch returning 400 `{ error: "Expected a JSON body." }`. Update the comment in `ingest/route.ts` that currently says the middleware is the only check needed. If a `tests/integration/*.test.ts` already exercises any of these routes through `callRoute`, add one unauthenticated 401 case there (rule 3 governs whether it runs).
+
+### IMP-07 — Align contributor docs and comments with the validation policy (P2, S)
+
+- `CONTRIBUTING.md`: replace items 2, 11 and 12 of "The autonomy protocol" and the "Verification: `CI green on <sha>`" line so they describe the manual-CI owner policy in `docs/VERIFY.md` (branch naming is free; validation is the commands run, the exact revision and the recorded pass/fail/skip results; merge needs no automatic GitHub check). Keep every other rule.
+- `docs/log/README.md`: change the verification bullet to "Verification: commands run, revision, results (see docs/VERIFY.md)".
+- `KNOWN-ISSUES.md`: remove the sentence "The final PR head must also have green checks before merge."
+- `src/lib/cron-auth.ts`: rewrite the module comment so it says the cron endpoint authenticates with a shared secret because the session middleware excludes it; remove the "only authenticated surface" and "HTTP basic auth" claims.
+- `PLAN.md`: add a two-line note at the very top stating this is the historical build-3 contract of the source project and that current work follows `docs/CONVERSION-PLAN.md` and `docs/VERIFY.md`. Do not edit anything else in the file.
+
+### IMP-13 — Make `npm run verify` match the documented mandatory checks (P2, S)
+
+Change the `verify` script to `npm run typecheck && npm run typecheck:worker && npm run lint && npm test && npm run test:worker && npm run test:db && npm run build`. Update the `verify` row in the README command table and the sentence in `docs/VERIFY.md` that lists what `verify` covers; state that `audit:production` stays separate because it needs network access.
+
+### IMP-06 — Pin the toolchain locally (P2, S)
+
+Add `.nvmrc` containing `22` and `.npmrc` containing `engine-strict=true`. Add one sentence to `docs/LOCAL-SETUP.md` section 1 saying installs now refuse an npm below the declared minimum. **Assumption to flag in the report:** the owner has not yet confirmed the Hostinger build npm version; if they cannot, they should drop `.npmrc` before deploying. Do not add this to the Worker folder.
+
+### IMP-10 — Commit the Worker lockfile (P2, S)
+
+In `workers/telegram-capture` run `npm install --package-lock-only` and commit the generated `package-lock.json` only. Remove `package-lock.json` from `.prettierignore` only if prettier complains; otherwise leave `.prettierignore` alone. Then run `npx wrangler deploy --dry-run` in that folder; if it fails on `compatibility_date`, do not change the date, report the exact message.
+
+### IMP-23 — Document the public InnerTube key (P3, S)
+
+Above `INNERTUBE_KEY` in `src/lib/youtube/captions/innertube.ts` add a comment stating that this is YouTube's public web-client InnerTube key that every youtube.com page embeds, that it is not a credential, and that it is constant because the web client sends it with every player request. No code change.
+
+### IMP-15 — Same-origin check for cookie-authenticated mutating routes (P3, M)
+
+New pure helper `src/lib/same-origin.ts` exporting `assertSameOrigin(request: Request): Response | null`: return a 403 JSON `{ error: "Cross-site request refused." }` when `sec-fetch-site` is `cross-site`, or when an `origin` header is present and differs from `applicationOrigin(request)`; otherwise null. Unit tests for: no headers, `same-origin`, `cross-site`, matching origin, mismatching origin, `applicationOrigin` throwing (treat as refuse). Call it first in every route under `src/app/api` that mutates (POST/PATCH/DELETE) and authenticates with the session cookie, after any bearer-token branch so `/api/cron/*` and the Bearer path of `/api/clips` are unaffected. List the routes you changed in the report.
+
+### IMP-16 — Accessible header dropdowns (P3, M)
+
+In `src/components/HeaderNav.tsx` make each dropdown controlled: `useState` per open menu, `aria-expanded` and `aria-controls` on the button, `id` on the list, Escape closes and returns focus to the button, click outside closes, route change closes. Keep the existing `group-hover`/`group-focus-within` classes so the menu still works without JavaScript. No visual redesign.
+
+### IMP-20 — Bind sessions to the current password (P3, M)
+
+In `src/lib/auth/token.ts` add a fourth dot-separated segment: the first 12 hex characters of `sha256(passwordHash ?? "")` computed with Web Crypto. `createSessionToken` takes the hash fragment; `verifySessionToken` keeps signature-only verification and returns the fragment in the payload. In `src/lib/auth/session.ts`, `startSession` passes the user's current hash and `getSession` returns null when the stored fragment does not match the row's hash. Update the token unit tests, add a case for "password changed → token rejected", and update the module comment that currently says tokens cannot be revoked. Existing tokens become invalid once; say so in the commit message.
+
+### IMP-22 — Native mode for the recovery proof (P3, M)
+
+Extend `scripts/verify-db-recovery.mjs` with a `--native` flag: when present, instead of `docker exec`, run `mariadb-dump` and `mariadb` found on `PATH` using the host, port, user, password and database parsed from `DATABASE_URL`, under the same `*_test` guard the script already applies. Keep the Docker path untouched for `.github/workflows/ci.yml`. Document the flag in `docs/VERIFY.md` under "Local automated checks". Run it against a disposable `*_test` database if one is available; otherwise record the skip.
+
+## Report back (under 40 lines)
+
+When finished, reply in chat with:
+
+1. Branch name and the commit list, one line per commit: `IMP-NN <sha> <subject>`.
+2. For each commit, the checks that ran and their results, as a single line: `typecheck ok · typecheck:worker ok · lint ok · test 6xx/6xx · test:worker 25/25 · build ok|n/a · artifact ok|n/a · test:db ok|skipped: <reason>`.
+3. Tasks skipped or partially impossible, with the one-line reason.
+4. Assumptions the owner must confirm (expected: IMP-06 Hostinger npm version; IMP-10 compatibility date if it failed; any copy reused in IMP-05).
+5. Anything you noticed but did not touch, at most five bullets.
+
+Do not paste diffs or file contents in the report.
