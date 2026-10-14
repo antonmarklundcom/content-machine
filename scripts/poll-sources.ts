@@ -4,7 +4,7 @@
  * nobody is waiting on this, so accept latency for a flat 50% discount).
  *
  *   export DATABASE_URL='mysql://...' YOUTUBE_API_KEY='...' GEMINI_API_KEY='...'
- *   npx tsx scripts/poll-sources.ts
+ *   npm run yt:poll
  *
  * The logic lives in src/lib/poll.ts so that /api/cron/poll — which is what
  * actually runs this on Hostinger — can call it in-process. This script is the
@@ -160,12 +160,12 @@ async function main(): Promise<void> {
   } else if (result.submitted && !result.waited) {
     console.log(
       `Results are collected by the next poll run, or now with:\n` +
-        `  npx tsx scripts/backfill.ts --collect ${result.submitted.batchId}`,
+        `  npm run yt:backfill -- --collect ${result.submitted.batchId}`,
     );
   } else if (result.waited && !result.waited.finished) {
     console.log(
       `Batch did not finish within the timeout. Collect it later:\n` +
-        `  npx tsx scripts/backfill.ts --collect ${result.waited.batchId}`,
+        `  npm run yt:backfill -- --collect ${result.waited.batchId}`,
     );
   }
 }

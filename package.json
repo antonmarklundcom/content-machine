@@ -42,7 +42,7 @@
     "yt:uploads": "tsx scripts/list-uploads.ts",
     "yt:ingest": "tsx scripts/ingest.ts",
     "yt:analyze": "tsx scripts/analyze.ts",
-    "yt:poll": "tsx scripts/poll-sources.ts",
+    "yt:poll": "tsx --conditions=react-server scripts/poll-sources.ts",
     "yt:screen": "tsx scripts/screen.ts",
     "yt:backfill": "tsx scripts/backfill.ts",
     "yt:spend": "tsx scripts/spend.ts",
