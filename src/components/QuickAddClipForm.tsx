@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslator } from "@/lib/i18n/client";
+import { translator, type Locale } from "@/lib/i18n";
 import { ResultMessage } from "./ResultMessage";
 
 const FIELD =
@@ -14,8 +15,9 @@ const FIELD =
  * is the browser's own session cookie, not the Bearer path — the same route,
  * a different caller.
  */
-export function QuickAddClipForm() {
-  const t = useTranslator();
+export function QuickAddClipForm({ locale }: { locale?: Locale } = {}) {
+  const fallback = useTranslator();
+  const t = locale ? translator(locale) : fallback;
   const router = useRouter();
   const [url, setUrl] = useState("");
   const [note, setNote] = useState("");

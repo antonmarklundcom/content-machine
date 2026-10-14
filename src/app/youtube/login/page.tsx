@@ -12,7 +12,7 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function LoginPage() {
   // Already signed in: there is nothing to do here, and a login form that
   // ignores an existing session is how you end up with two of them.
-  if (await getSession()) redirect("/youtube");
+  if (await getSession()) redirect("/");
 
   const locale = await getLocale();
   const t = translator(locale);

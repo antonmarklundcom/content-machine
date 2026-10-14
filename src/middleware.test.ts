@@ -36,3 +36,14 @@ test("protected requests get a server marker; spoofed markers cannot bypass logi
     }
   }
 });
+
+test("login resets a stale protected marker after logout without unlocking private routes", async () => {
+  const login = await middleware(
+    new NextRequest("https://content.antonmarklund.com/youtube/login", {
+      headers: { "x-content-machine-protected": "1" },
+    }),
+  );
+  assert.equal(login.status, 200);
+  assert.equal(login.headers.get("location"), null);
+  assert.equal(login.headers.get("x-middleware-request-x-content-machine-protected"), "0");
+});

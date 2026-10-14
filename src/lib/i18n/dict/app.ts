@@ -51,7 +51,7 @@ export const en = {
 } as const;
 
 export const sv: Record<keyof typeof en, string> = {
-  "app.name": "Content Engine",
+  "app.name": "Content Machine",
   "app.title": "YouTube-analysarbetsyta",
   "app.description": "Privat researchverktyg — läs sammanfattningar i stället för att titta.",
 

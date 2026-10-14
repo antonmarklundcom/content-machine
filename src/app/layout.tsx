@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { requireUser } from "@/lib/auth/session";
 import { Header } from "@/components/Header";
+import { WorkspaceGuide } from "@/components/WorkspaceGuide";
 import { getLocale } from "@/lib/i18n/server";
 import "./globals.css";
 
@@ -16,7 +17,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // lang must follow the chosen locale — it is what a screen reader uses to
   // pick a pronunciation, and a Swedish UI announced in English is unusable.
   // Middleware marks protected pages; re-read the account so revoked cookies fail closed.
-  if ((await headers()).get("x-content-machine-protected") === "1") await requireUser();
+  const protectedPage = (await headers()).get("x-content-machine-protected") === "1";
+  if (protectedPage) await requireUser();
   const locale = await getLocale();
 
   // One header for the whole app (PLAN.md §1.22). Header itself skips the
@@ -25,6 +27,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     <html lang={locale}>
       <body className="min-h-screen antialiased">
         <Header />
+        {protectedPage && <WorkspaceGuide locale={locale} />}
         {children}
       </body>
     </html>

@@ -26,7 +26,7 @@ const OPTIONS: { key: AutomationFeature; label: string; note: string }[] = [
 export async function AutomationSettings() {
   const policy = await getAutomationPolicy();
   return (
-    <section className="surface-border surface-card mt-8 p-5">
+    <section id="automation" className="surface-border surface-card mt-8 p-5">
       <h2 className="text-lg font-semibold">
         Automation · {policy.enabled ? "enabled" : "paused"}
       </h2>
