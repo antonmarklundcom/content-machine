@@ -266,6 +266,12 @@ export const clips = mysqlTable(
     learnCategory: varchar("learn_category", { length: 64 }),
     /** "How to start" steps from the learn summary. */
     howToStart: json("how_to_start").$type<string[]>(),
+    /** Source-grounded learning brief; older summaries can have no details. */
+    learnDetails: json("learn_details").$type<{
+      takeaways: string[];
+      resources: { label: string; url: string }[];
+      limitations: string[];
+    }>(),
     /** When Anton marked it tried/implemented; null = not yet. */
     implementedAt: datetime("implemented_at", { mode: "date", fsp: 3 }),
     /** When Anton committed to it from the weekly nudge. */
@@ -2232,3 +2238,10 @@ export const higgsfieldJobs = mysqlTable(
 );
 
 export type HiggsfieldJob = typeof higgsfieldJobs.$inferSelect;
+
+/** Owner preferences live in the database, never in the deployment filesystem. */
+export const applicationSettings = mysqlTable("application_settings", {
+  key: varchar("key", { length: 64 }).primaryKey(),
+  value: json("value").$type<Record<string, unknown>>().notNull(),
+  updatedAt: datetime("updated_at", { mode: "date", fsp: 3 }).notNull(),
+});

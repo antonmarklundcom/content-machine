@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { AutomationSettings } from "@/components/AutomationSettings";
 import { SettingsForm } from "@/components/SettingsForm";
 import { isOwner } from "@/lib/auth/roles";
 import { requireUser } from "@/lib/auth/session";
@@ -51,6 +52,8 @@ export default async function SettingsPage({ searchParams }: { searchParams: Sea
       ) : (
         <SettingsForm fields={fields} locale={locale} />
       )}
+
+      {isOwner(user) && <AutomationSettings />}
 
       <section className="surface-card mt-8 p-4 text-sm">
         <h2 className="font-semibold text-[var(--color-ink)]">{t("settings.database")}</h2>

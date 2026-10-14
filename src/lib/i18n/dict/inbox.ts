@@ -33,7 +33,7 @@ export const en = {
   "inbox.noNote": "No note.",
   "inbox.savedAt": "saved",
   "inbox.viewVideo": "Open analysis ↗",
-  "inbox.retry": "Retry",
+  "inbox.retry": "Process / retry",
   "inbox.retrying": "Retrying…",
   "inbox.dismiss": "Dismiss",
   "inbox.dismissConfirm":

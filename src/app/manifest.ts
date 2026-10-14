@@ -14,8 +14,8 @@ import type { MetadataRoute } from "next";
  */
 export default function manifest(): MetadataRoute.Manifest {
   const withShareTarget = {
-    name: "Content Engine",
-    short_name: "Content Engine",
+    name: "Content Machine",
+    short_name: "Content Machine",
     description: "Save a link to the clip inbox from any app's share sheet.",
     start_url: "/inbox",
     display: "standalone",

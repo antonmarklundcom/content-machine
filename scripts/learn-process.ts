@@ -1,5 +1,5 @@
 /**
- * Summarise learn clips (docs/PLAN-build4.md §1.13, docs/LEARN.md): every
+ * Summarise learn clips (docs/PLAN-build4.md Â§1.13, docs/LEARN.md): every
  * clip with purpose `learn` and no category yet, oldest first.
  *
  *   npm run learn:process [--limit 20] [--id 42] [--force] [--retry-failed]
@@ -10,6 +10,7 @@
  * Gemini). A clip held by another run is skipped. Any failed clip exits 1.
  */
 
+import { isAutomationAllowed } from "../src/lib/automation/store";
 import { closeDb } from "../src/db";
 import { processLearnClip, processLearnClips, type LearnOutcome } from "../src/lib/learn/process";
 
@@ -22,7 +23,7 @@ function report(o: LearnOutcome): void {
   if (o.status === "done") {
     console.log(`  clip ${o.clipId}: ${o.category} ($${o.costUsd.toFixed(4)})`);
   } else if (o.status === "failed") {
-    console.log(`  clip ${o.clipId}: FAILED — ${o.error}`);
+    console.log(`  clip ${o.clipId}: FAILED â€” ${o.error}`);
   } else {
     console.log(`  clip ${o.clipId}: skipped (${o.reason})`);
   }
@@ -36,8 +37,13 @@ async function main(): Promise<number> {
     report(outcome);
     return outcome.status === "failed" ? 1 : 0;
   }
+  if (!(await isAutomationAllowed("learningSummaries"))) {
+    console.log("Automatic learning summaries are paused in Settings â†’ Automation.");
+    return 0;
+  }
   const limit = Number(arg("--limit") ?? 20);
   const result = await processLearnClips({
+    automatic: true,
     limit: Number.isFinite(limit) ? limit : 20,
     force,
     retryFailed: process.argv.includes("--retry-failed"),

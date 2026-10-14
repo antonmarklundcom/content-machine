@@ -54,7 +54,8 @@
     "artifact:check": "node scripts/validate-hostinger-artifact.mjs",
     "postbuild": "node scripts/prepare-hostinger.mjs",
     "typecheck:worker": "tsc --project workers/telegram-capture/tsconfig.json --noEmit",
-    "audit:production": "npm audit --omit=dev --audit-level=moderate"
+    "audit:production": "npm audit --omit=dev --audit-level=moderate",
+    "deployment:check": "node scripts/check-private-deployment.mjs"
   },
   "dependencies": {
     "@google/genai": "^2.19.0",

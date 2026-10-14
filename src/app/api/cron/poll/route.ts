@@ -1,3 +1,4 @@
+import { AutomationPausedError } from "@/lib/automation/policy";
 import { authorizeCronRequest } from "@/lib/cron-auth";
 import { POLL_LEASE, POLL_LEASE_TTL_MS, withLease } from "@/lib/lease";
 import { pollSources, type PollResult } from "@/lib/poll";
@@ -60,6 +61,8 @@ async function handle(request: Request): Promise<Response> {
     const result = run.value;
     return json({ ok: true, ...summarize(result), result }, 200);
   } catch (err) {
+    if (err instanceof AutomationPausedError)
+      return json({ ok: true, paused: true, message: err.message }, 200);
     if (err instanceof SpendCapExceededError) {
       // Working as designed, not a crash — 402 so a cron wrapper can tell the
       // difference without parsing the body.

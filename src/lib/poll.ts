@@ -11,9 +11,9 @@ import { updateReturning } from "@/db/mutations";
  * but an exit code.
  */
 
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { clips, sources, type Source } from "@/db/schema";
+import { clips, sources, videos, type Source } from "@/db/schema";
 import {
   abandonStaleBatch,
   awaitBatch,
@@ -27,6 +27,8 @@ import {
   type BatchOutcome,
 } from "@/lib/analysis/batch";
 import { DEFAULT_MODEL, isAnalysisModel, type AnalysisModel } from "@/lib/analysis/pricing";
+import { automaticVideoCondition } from "@/lib/automation/sql";
+import { isAutomationAllowed, requireAutomation } from "@/lib/automation/store";
 import { findPendingVideos } from "@/lib/analysis/run";
 import { screeningEnabled } from "@/lib/screening/policy";
 import { findUnscreenedVideos, screenVideos, type ScreenRunResult } from "@/lib/screening/run";
@@ -149,6 +151,7 @@ export async function pollSources(options: PollOptions = {}): Promise<PollResult
     onProgress = () => {},
   } = options;
 
+  await requireAutomation("youtubeMonitoring");
   const startedAt = new Date();
   const before = await spendStatus();
 
@@ -176,6 +179,13 @@ export async function pollSources(options: PollOptions = {}): Promise<PollResult
   let quotaExhausted = false;
 
   for (const source of active) {
+    await requireAutomation("youtubeMonitoring");
+    const [current] = await db
+      .select({ active: sources.active })
+      .from(sources)
+      .where(eq(sources.id, source.id))
+      .limit(1);
+    if (!current?.active) continue;
     try {
       const result = await pollSource(source, limit, youtube, captions);
       results.push(result);
@@ -251,11 +261,31 @@ export async function pollSources(options: PollOptions = {}): Promise<PollResult
   // saving. Skipped on a dry run because screening spends real money — a run
   // that promises to submit nothing must also buy nothing.
   if (screen && !dryRun) {
-    const unscreened = await findUnscreenedVideos(screenLimit);
+    const unscreened = await findUnscreenedVideos(
+      screenLimit,
+      true,
+      await isAutomationAllowed("captureAnalysis"),
+    );
     if (unscreened.length > 0) {
       onProgress({ phase: "screening", count: unscreened.length });
       try {
-        screening = await screenVideos(unscreened, { model });
+        screening = await screenVideos(unscreened, {
+          model,
+          canContinue: async (video) => {
+            await requireAutomation("youtubeMonitoring");
+            const [eligible] = await db
+              .select({ id: videos.id })
+              .from(videos)
+              .where(
+                and(
+                  eq(videos.id, video.id),
+                  automaticVideoCondition(await isAutomationAllowed("captureAnalysis")),
+                ),
+              )
+              .limit(1);
+            return Boolean(eligible);
+          },
+        });
         onProgress({ phase: "screened", result: screening });
       } catch (err) {
         // A cap that will not fund the screening will not fund the analysis
@@ -267,7 +297,11 @@ export async function pollSources(options: PollOptions = {}): Promise<PollResult
     }
   }
 
-  const pending = await findPendingVideos(pendingLimit);
+  const pending = await findPendingVideos(
+    pendingLimit,
+    true,
+    await isAutomationAllowed("captureAnalysis"),
+  );
   onProgress({ phase: "pending", count: pending.length });
 
   if (pending.length === 0) {
@@ -309,7 +343,20 @@ export async function pollSources(options: PollOptions = {}): Promise<PollResult
 
   let submission;
   try {
-    submission = await submitAnalysisBatch(pending, { model });
+    await requireAutomation("youtubeMonitoring");
+    const eligible = await db
+      .select()
+      .from(videos)
+      .where(
+        and(
+          inArray(
+            videos.id,
+            pending.map((video) => video.id),
+          ),
+          automaticVideoCondition(await isAutomationAllowed("captureAnalysis")),
+        ),
+      );
+    submission = await submitAnalysisBatch(eligible, { model });
   } catch (err) {
     if (err instanceof SpendCapExceededError) {
       return finish({

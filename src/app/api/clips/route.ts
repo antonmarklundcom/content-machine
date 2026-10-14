@@ -1,3 +1,4 @@
+import { isAutomationAllowed } from "@/lib/automation/store";
 import { NextResponse } from "next/server";
 import { authorizeClipToken, presentedClipToken } from "@/lib/clips/auth";
 import { isClipPurpose, normalizeTags, processYouTubeClip, saveClip } from "@/lib/clips/save";
@@ -96,8 +97,15 @@ export async function POST(request: Request): Promise<Response> {
   // The row exists from here on. Anything below can fail without losing the
   // capture, which is the whole point of writing it first (§1.6).
   let clip = saved.clip;
-  if (clip.platform === "youtube" && clip.status !== "analyzed" && clip.status !== "promoted") {
-    clip = await processYouTubeClip(clip);
+  if (
+    clip.purpose !== "learn" &&
+    clip.platform === "youtube" &&
+    clip.status !== "analyzed" &&
+    clip.status !== "promoted" &&
+    (presentedToken !== null || (await getSession())?.role === "owner") &&
+    (await isAutomationAllowed("captureAnalysis"))
+  ) {
+    clip = await processYouTubeClip(clip, { automatic: true });
   }
 
   return NextResponse.json({ clip, created: saved.created }, { status: saved.created ? 201 : 200 });

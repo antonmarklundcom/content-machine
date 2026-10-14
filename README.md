@@ -4,6 +4,10 @@ A multi-brand content and media workspace with a web interface, research and pub
 
 The initial app and feature history came from a fixed Content Engine revision. See [source provenance](docs/SOURCE-PROVENANCE.md), [the dated reliability audit](docs/AUDIT-FIXES-2026-10-08.md), and [conversion findings](docs/CONVERSION-FINDINGS.md) for source evidence, inherited audit history, and current conversion status. The original repository retains its full Git history.
 
+## Private pilot
+
+See [the private Hostinger pilot guide](docs/HOSTINGER-PRIVATE-PILOT.md) for capture, saved lessons/resource links, automation switches and deployment acceptance. New installs start with automation paused. The code is prepared for review; hosted acceptance remains separate.
+
 ## Local setup
 
 Use [docs/LOCAL-SETUP.md](docs/LOCAL-SETUP.md). You need Node.js 22.13+, npm 11.17+, a reachable MariaDB database, and a local `.env`. Migrations and seed commands are explicit operator actions; builds and server startup do not run them.
@@ -14,7 +18,7 @@ The online app mode gates PC-dependent production features. Media paths, CLI int
 
 - `DATABASE_URL` uses the MySQL protocol, for example `mysql://user:encoded-password@host:3306/content_machine`.
 - Runtime database access uses `mysql2`; schema and active migrations use Drizzle’s MySQL dialect.
-- The current baseline contains 50 application tables. PostgreSQL/Neon setup text and migrations belong to the historical source record, not this runtime.
+- The current baseline contains 51 application tables. PostgreSQL/Neon setup text and migrations belong to the historical source record, not this runtime.
 - Run `npm run db:migrate` and `npm run db:seed` as explicit maintenance steps against the intended database. Do not put them in build or start hooks.
 - Hostinger packaging guidance is in [docs/DEPLOY-HOSTINGER.md](docs/DEPLOY-HOSTINGER.md).
 

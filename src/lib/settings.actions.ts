@@ -14,6 +14,7 @@ import { revalidatePath } from "next/cache";
 import { resetGeminiClient } from "@/lib/ai";
 import { aiProvider } from "@/lib/ai-cli";
 import { requireOwner } from "@/lib/auth/session";
+import { isOnlineDeploy } from "@/lib/pc-only";
 import { writeEnv } from "@/lib/settings/envfile";
 import { EDITABLE_KEYS } from "@/lib/settings/fields";
 
@@ -22,7 +23,7 @@ export type SettingsResult = { ok: true; message?: string } | { ok: false; error
 const ENV_PATH = () => path.join(process.cwd(), ".env");
 
 export async function isLocalRequest(): Promise<boolean> {
-  if (process.env.VERCEL) return false;
+  if (process.env.VERCEL || isOnlineDeploy()) return false;
   const host = ((await headers()).get("host") ?? "").toLowerCase();
   return /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(host);
 }

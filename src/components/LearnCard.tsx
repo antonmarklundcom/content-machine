@@ -1,6 +1,8 @@
 import type { Clip } from "@/db/schema";
+import { implementationBrief } from "@/lib/learn/brief";
 import { formatDate } from "@/lib/format";
 import { translator, type Locale, type TranslationKey } from "@/lib/i18n";
+import { LearnMaterialForm } from "./LearnMaterialForm";
 import { LearnActions } from "./LearnActions";
 
 const CHIP =
@@ -17,6 +19,7 @@ export function LearnCard({ clip, locale }: { clip: Clip; locale: Locale }) {
   const screenshot = isScreenshotUrl(clip.url);
   const title = clip.title || (screenshot ? t("learn.card.screenshot") : clip.url);
   const steps = clip.howToStart ?? [];
+  const details = clip.learnDetails;
 
   return (
     <li className="surface-border surface-card flex flex-col gap-3 p-5">
@@ -51,6 +54,19 @@ export function LearnCard({ clip, locale }: { clip: Clip; locale: Locale }) {
         <p className="text-sm text-[var(--color-ink-muted)]">{t("learn.card.notSummarised")}</p>
       )}
 
+      {details?.takeaways.length ? (
+        <div>
+          <p className="text-xs font-medium text-[var(--color-ink-muted)]">
+            {t("learn.card.takeaways")}
+          </p>
+          <ul className="mt-1 list-disc space-y-1 pl-5 text-sm text-[var(--color-ink)]">
+            {details.takeaways.map((lesson, i) => (
+              <li key={i}>{lesson}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
       {steps.length > 0 && (
         <div>
           <p className="text-xs font-medium tracking-wide text-[var(--color-ink-muted)] uppercase">
@@ -62,6 +78,49 @@ export function LearnCard({ clip, locale }: { clip: Clip; locale: Locale }) {
             ))}
           </ol>
         </div>
+      )}
+
+      {details?.resources.length ? (
+        <div>
+          <p className="text-xs font-medium text-[var(--color-ink-muted)]">
+            {t("learn.card.resources")}
+          </p>
+          <ul className="mt-1 space-y-1 text-sm">
+            {details.resources.map((resource) => (
+              <li key={resource.url}>
+                <a
+                  href={resource.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="break-all text-[var(--color-accent)] hover:underline"
+                >
+                  {resource.label}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      {details?.limitations.length ? (
+        <div>
+          <p className="text-xs font-medium text-[var(--color-ink-muted)]">
+            {t("learn.card.limitations")}
+          </p>
+          <ul className="mt-1 list-disc space-y-1 pl-5 text-sm text-[var(--color-ink-muted)]">
+            {details.limitations.map((limitation, i) => (
+              <li key={i}>{limitation}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      {clip.learnCategory && (
+        <a
+          href={`data:text/markdown;charset=utf-8,${encodeURIComponent(implementationBrief(clip))}`}
+          download={`lesson-${clip.id}-implementation.md`}
+          className="text-sm font-medium text-[var(--color-accent)] hover:underline"
+        >
+          {t("learn.card.exportBrief")}
+        </a>
       )}
 
       <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--color-ink-muted)]">
@@ -88,6 +147,8 @@ export function LearnCard({ clip, locale }: { clip: Clip; locale: Locale }) {
           {t("learn.card.error", { error: clip.error })}
         </p>
       )}
+
+      <LearnMaterialForm clipId={clip.id} caption={clip.postText} transcript={clip.transcript} />
 
       <LearnActions
         clipId={clip.id}

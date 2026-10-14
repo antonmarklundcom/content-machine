@@ -2,14 +2,14 @@
 
 export const en = {
   "learn.title": "Learn",
-  "learn.eyebrow": "AI tools to try",
+  "learn.eyebrow": "Lessons to apply",
   "learn.intro":
-    "Links and screenshots sent to the bot with #learn or #ai, summarised with how to start. One a week gets a nudge.",
+    "Save video lessons, useful links and screenshots with #learn or #ai. Review takeaways and turn them into practical steps.",
   "learn.countOne": "item",
   "learn.countMany": "items",
   "learn.ownerOnly": "Only the owner can see the learn list.",
   "learn.captureHint":
-    "Send a link or a screenshot to the capture bot with #learn (or #ai), then run npm run learn:process or press Summarise.",
+    "Save a link in your inbox for learning, or send it to the capture bot with #learn. Press Summarise when you want to process it.",
   "learn.filter.category": "Category",
   "learn.filter.allCategories": "All categories",
   "learn.filter.implemented": "Implemented",
@@ -33,7 +33,17 @@ export const en = {
   "learn.category.learning-resource": "Learning resource",
   "learn.category.data-or-scraping": "Data or scraping",
   "learn.category.other": "Other",
-  "learn.card.howToStart": "How to start",
+  "learn.material.title": "Add caption or transcript",
+  "learn.material.hint":
+    "If Instagram or YouTube extraction is unavailable, paste the caption, resource links or transcript here. Saving clears the previous summary and does not run AI. Each field allows 100,000 characters.",
+  "learn.material.caption": "Caption / description and links",
+  "learn.material.transcript": "Transcript",
+  "learn.material.save": "Save source material",
+  "learn.card.takeaways": "Key lessons",
+  "learn.card.resources": "Links from the source",
+  "learn.card.limitations": "Limitations and missing information",
+  "learn.card.exportBrief": "Download implementation brief",
+  "learn.card.howToStart": "How to apply this",
   "learn.card.open": "Open link",
   "learn.card.screenshot": "Screenshot sent to the bot",
   "learn.card.notSummarised": "Not summarised yet.",
@@ -59,7 +69,7 @@ export const en = {
 
 export const sv: Record<keyof typeof en, string> = {
   "learn.title": "Lära",
-  "learn.eyebrow": "AI-verktyg att testa",
+  "learn.eyebrow": "L�rdomar att anv�nda",
   "learn.intro":
     "Länkar och skärmbilder som skickats till boten med #learn eller #ai, sammanfattade med hur man kommer igång. En per vecka får en påminnelse.",
   "learn.countOne": "sak",
@@ -90,6 +100,16 @@ export const sv: Record<keyof typeof en, string> = {
   "learn.category.learning-resource": "Läromaterial",
   "learn.category.data-or-scraping": "Data eller skrapning",
   "learn.category.other": "Övrigt",
+  "learn.material.title": "L�gg till text eller transkript",
+  "learn.material.hint":
+    "Klistra in beskrivning, l�nkar eller transkript n�r videon inte kan l�sas. �ndringar rensar den gamla sammanfattningen. Sparandet k�r ingen AI. H�gst 100 000 tecken per f�lt.",
+  "learn.material.caption": "Beskrivning och l�nkar",
+  "learn.material.transcript": "Transkript",
+  "learn.material.save": "Spara k�llmaterial",
+  "learn.card.takeaways": "Viktiga l�rdomar",
+  "learn.card.resources": "L�nkar fr�n k�llan",
+  "learn.card.limitations": "Begr�nsningar och saknad information",
+  "learn.card.exportBrief": "Ladda ner genomf�randeplan",
   "learn.card.howToStart": "Kom igång",
   "learn.card.open": "Öppna länken",
   "learn.card.screenshot": "Skärmbild skickad till boten",

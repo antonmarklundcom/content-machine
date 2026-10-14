@@ -1,7 +1,7 @@
 /** The shell: app name, language switch, sign-in, error and not-found pages, and the small shared widgets (pagination, result banners). */
 
 export const en = {
-  "app.name": "Content Engine",
+  "app.name": "Content Machine",
   "app.title": "YouTube Intelligence Workspace",
   "app.description": "Private research workspace — read digests instead of watching videos.",
 

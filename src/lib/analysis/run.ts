@@ -15,6 +15,7 @@ import {
 } from "./pricing";
 import { ANALYSIS_JSON_SCHEMA, ANALYSIS_SYSTEM_PROMPT, buildUserPrompt } from "./prompt";
 import { completeSpendCommit, dispatchSpend, recordSpend } from "@/lib/spend";
+import { automaticVideoCondition } from "@/lib/automation/sql";
 import { syncVideoTags } from "@/lib/tags";
 import { screenMinScore } from "@/lib/screening/policy";
 import { notCulled } from "@/lib/screening/sql";
@@ -334,13 +335,18 @@ export async function findPendingVideosByIds(ids: number[]): Promise<Video[]> {
     .orderBy(desc(sql`${videos.publishedAt} is null`), desc(videos.publishedAt));
 }
 
-export async function findPendingVideos(limit = 50): Promise<Video[]> {
+export async function findPendingVideos(
+  limit = 50,
+  activeSourcesOnly = false,
+  includeUntracked = false,
+): Promise<Video[]> {
   return db
     .select()
     .from(videos)
     .where(
       and(
         eq(videos.captionStatus, "available"),
+        activeSourcesOnly ? automaticVideoCondition(includeUntracked) : undefined,
         sql`exists (select 1 from ${transcripts} where ${transcripts.videoId} = ${videos.id})`,
         sql`not exists (
           select 1 from ${analyses}

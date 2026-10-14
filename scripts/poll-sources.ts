@@ -23,6 +23,7 @@
  * Windows Task Scheduler (docs/log/o6.md), not by Vercel Cron (§1.27).
  */
 
+import { AutomationPausedError } from "../src/lib/automation/policy";
 import { closeDb } from "../src/db";
 import { STALE_BATCH_HOURS } from "../src/lib/analysis/batch";
 import { POLL_LEASE, POLL_LEASE_TTL_MS, withLease } from "../src/lib/lease";
@@ -184,6 +185,11 @@ main()
     await closeDb();
   })
   .catch(async (err) => {
+    if (err instanceof AutomationPausedError) {
+      console.log(err.message);
+      await closeDb();
+      return;
+    }
     console.error("\nPoll FAILED:", err instanceof Error ? err.message : err);
     await closeDb().catch(() => {});
     process.exit(1);

@@ -70,6 +70,36 @@ export default async function HomePage() {
         })}
       </p>
 
+      <section className="surface-border surface-card mt-6 p-5">
+        <h2 className="font-semibold">Your private workspace</h2>
+        <p className="mt-2 text-sm text-[var(--color-ink-muted)]">
+          Save a video, keep its lessons and links, then turn approved facts into residency or
+          property content.
+        </p>
+        <div className="mt-4 flex flex-wrap gap-4">
+          <Link className={ACTION} href="/inbox">
+            Save a link
+          </Link>
+          <Link className={ACTION} href="/learn">
+            Lessons and implementation steps
+          </Link>
+          <Link className={ACTION} href="/youtube/sources">
+            YouTube sources
+          </Link>
+          <Link className={ACTION} href="/brand/guide">
+            Residency content
+          </Link>
+          <Link className={ACTION} href="/brand/propia">
+            Real estate content
+          </Link>
+          <Link className={ACTION} href="/studio/new">
+            Write a script
+          </Link>
+          <Link className={ACTION} href="/settings">
+            Automation controls
+          </Link>
+        </div>
+      </section>
       {families.length === 0 && (
         <p className="mt-6 text-sm text-[var(--color-ink-muted)]">
           {t("home.noFamilies")}{" "}

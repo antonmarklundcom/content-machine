@@ -1,3 +1,4 @@
+import { authoringApiGuard } from "@/lib/auth/api-guard";
 import { NextResponse } from "next/server";
 import { isIdeaStatus, listAllIdeas, listIdeas } from "@/lib/bridge";
 
@@ -7,6 +8,8 @@ import { isIdeaStatus, listAllIdeas, listIdeas } from "@/lib/bridge";
  * it was before paging existed, so the brand page's list keeps working.
  */
 export async function GET(request: Request) {
+  const denied = await authoringApiGuard();
+  if (denied) return denied;
   const params = new URL(request.url).searchParams;
   const brandId = params.get("brandId");
   if (!brandId) {

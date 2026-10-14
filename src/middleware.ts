@@ -33,7 +33,11 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
   }
 
   const token = request.cookies.get(SESSION_COOKIE)?.value;
-  if (await verifySessionToken(token, secret)) return NextResponse.next();
+  if (await verifySessionToken(token, secret)) {
+    const forwarded = new Headers(request.headers);
+    forwarded.set("x-content-machine-protected", "1");
+    return NextResponse.next({ request: { headers: forwarded } });
+  }
 
   return NextResponse.redirect(login);
 }
