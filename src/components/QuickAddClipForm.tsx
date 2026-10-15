@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslator } from "@/lib/i18n/client";
+import { translator, type Locale } from "@/lib/i18n";
 import { ResultMessage } from "./ResultMessage";
 
 const FIELD =
@@ -14,11 +15,13 @@ const FIELD =
  * is the browser's own session cookie, not the Bearer path — the same route,
  * a different caller.
  */
-export function QuickAddClipForm() {
-  const t = useTranslator();
+export function QuickAddClipForm({ locale }: { locale?: Locale } = {}) {
+  const fallback = useTranslator();
+  const t = locale ? translator(locale) : fallback;
   const router = useRouter();
   const [url, setUrl] = useState("");
   const [note, setNote] = useState("");
+  const [learning, setLearning] = useState(true);
   const [pending, startTransition] = useTransition();
   const [result, setResult] = useState<{ tone: "success" | "error"; text: string } | null>(null);
 
@@ -29,7 +32,11 @@ export function QuickAddClipForm() {
       const res = await fetch("/api/clips", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url, note: note || undefined }),
+        body: JSON.stringify({
+          url,
+          note: note || undefined,
+          purpose: learning ? "learn" : undefined,
+        }),
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -70,6 +77,10 @@ export function QuickAddClipForm() {
           placeholder={t("inbox.quickAdd.notePlaceholder")}
           className={FIELD}
         />
+      </label>
+      <label className="flex items-center gap-2 text-sm">
+        <input type="checkbox" checked={learning} onChange={(e) => setLearning(e.target.checked)} />
+        {t("capture.purpose.learn")}
       </label>
       <button
         type="submit"

@@ -114,3 +114,63 @@ test("summarizeLearn sends the schema and a cap reservation through the runner",
   assert.ok(seen[0]!.estimateUsd > 0 && seen[0]!.estimateUsd === estimateLearnSummaryCostUsd());
   assert.match(seen[0]!.system, /Always write in English/);
 });
+
+test("legacy summaries remain readable with empty lesson details", () => {
+  const out = parseLearnSummary(JSON.stringify(CANNED));
+  assert.deepEqual(out.takeaways, []);
+  assert.deepEqual(out.resources, []);
+  assert.deepEqual(out.limitations, []);
+});
+
+test("resource links require source evidence and reject invented or local targets", () => {
+  const urls = [
+    "https://docs.cloudflare.com/workers/",
+    "https://invented-resource.org/start",
+    "http://127.0.0.1/admin",
+    "http://192.168.1.2/private",
+    "http://localhost/private",
+    "http://[::1]/private",
+    "https://x.internal/private",
+    "https://user:password@docs.cloudflare.com/workers/",
+    "javascript:alert(1)",
+  ];
+  const input = {
+    url: "https://youtube.com/watch?v=123",
+    platform: "youtube",
+    caption: urls.filter((url) => !url.includes("invented-resource")).join("\n"),
+  };
+  const out = parseLearnSummary(
+    JSON.stringify({
+      ...CANNED,
+      takeaways: ["Use an explicit plan", "Use an explicit plan"],
+      resources: urls.map((url) => ({ label: "Resource", url })),
+      limitations: ["Screen-only steps are unavailable"],
+    }),
+    input,
+  );
+  assert.deepEqual(out.resources, [{ label: "Resource", url: urls[0] }]);
+  assert.deepEqual(out.takeaways, ["Use an explicit plan"]);
+  assert.equal(out.limitations.length, 1);
+});
+
+test("links outside the truncated evidence cannot become resources", () => {
+  const url = "https://docs.cloudflare.com/workers/";
+  const out = parseLearnSummary(
+    JSON.stringify({ ...CANNED, resources: [{ label: "Docs", url }] }),
+    {
+      url: "https://youtube.com/",
+      platform: "youtube",
+      transcript: "x".repeat(LEARN_TRANSCRIPT_MAX_CHARS + 1) + " " + url,
+    },
+  );
+  assert.deepEqual(out.resources, []);
+});
+
+test("partial transcripts disclose truncation without claiming complete extraction", () => {
+  const out = parseLearnSummary(JSON.stringify(CANNED), {
+    url: "https://youtube.com/",
+    platform: "youtube",
+    transcript: "x".repeat(LEARN_TRANSCRIPT_MAX_CHARS + 1),
+  });
+  assert.ok(out.limitations.some((value) => value.includes("truncated")));
+});

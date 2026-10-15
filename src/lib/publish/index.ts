@@ -12,6 +12,7 @@ import {
   type Post,
   type SocialAccount,
 } from "@/db/schema";
+import { isAutomationAllowed } from "@/lib/automation/store";
 import { withLease } from "@/lib/lease";
 import { assetOriginal } from "@/lib/media/originals";
 import { publishCopy } from "@/lib/media/public";
@@ -736,6 +737,7 @@ async function failed(
 // --- the due run ---------------------------------------------------------------
 
 export type DueReport = {
+  paused?: boolean;
   busy: boolean;
   considered: number;
   outcomes: PublishOutcome[];
@@ -751,6 +753,8 @@ export type DueReport = {
 export async function publishDue(
   options: PublishOptions & { limit?: number } = {},
 ): Promise<DueReport> {
+  if (!(await isAutomationAllowed("publishing")))
+    return { paused: true, busy: false, considered: 0, outcomes: [], interrupted: [] };
   const now = options.now ?? new Date();
   const limit = options.limit ?? 10;
   const run = await withLease(PUBLISH_LEASE, PUBLISH_LEASE_TTL_MS, async () => {
@@ -774,6 +778,10 @@ export async function publishDue(
     const report: DueReport = { busy: false, considered: 0, outcomes: [], interrupted: [] };
     let attempted = 0;
     for (const post of candidates) {
+      if (!(await isAutomationAllowed("publishing"))) {
+        report.paused = true;
+        break;
+      }
       if (attempted >= limit) break;
       if (post.status === "publishing" && !post.externalContainerId) {
         if (await markInterrupted(post, now)) report.interrupted.push(post.id);
@@ -826,6 +834,7 @@ async function markInterrupted(post: Post, now: Date): Promise<boolean> {
 
 /** One line for a cron log. */
 export function summarizeDue(report: DueReport): string {
+  if (report.paused) return "Scheduled publishing is paused in Settings → Automation.";
   if (report.busy) return "Another publish run holds the lease; skipped.";
   const count = (r: PublishOutcome["result"]) =>
     report.outcomes.filter((o) => o.result === r).length;

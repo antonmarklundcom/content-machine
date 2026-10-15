@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { HomeLaunchpad } from "@/components/HomeLaunchpad";
 import type { Brand } from "@/db/schema";
 import {
   countPostsByStatus,
@@ -6,7 +7,7 @@ import {
   listFamiliesWithBrands,
   type PostsQuery,
 } from "@/lib/bridge";
-import { getTranslator } from "@/lib/i18n/server";
+import { getLocale, getTranslator } from "@/lib/i18n/server";
 
 // Families, brands and post counts come from the database on every request —
 // nothing here can be prerendered at build time on a machine with no
@@ -33,10 +34,11 @@ const ACTION =
 /** Home (PLAN.md §6.S20): one card per family with this week's scheduled and posted counts. */
 export default async function HomePage() {
   const week = thisWeek(new Date());
-  const [families, activeBrands, t] = await Promise.all([
+  const [families, activeBrands, t, locale] = await Promise.all([
     listFamiliesWithBrands(),
     listBrands(),
     getTranslator(),
+    getLocale(),
   ]);
   const count = async (scope: Omit<PostsQuery, "page" | "status" | "statuses" | "from" | "to">) => {
     const byStatus = await countPostsByStatus({ ...scope, ...week });
@@ -59,75 +61,89 @@ export default async function HomePage() {
   );
 
   return (
-    <main className="mx-auto max-w-5xl px-6 py-10">
-      <h1 className="text-2xl font-semibold tracking-tight text-[var(--color-ink)]">
-        {t("home.title")}
-      </h1>
-      <p className="mt-1 text-sm text-[var(--color-ink-muted)]">
-        {t("home.intro", {
-          from: day(week.from),
-          to: day(new Date(week.to.getTime() - 86_400_000)),
-        })}
-      </p>
-
-      {families.length === 0 && (
-        <p className="mt-6 text-sm text-[var(--color-ink-muted)]">
-          {t("home.noFamilies")}{" "}
-          <Link href="/families" className={ACTION}>
-            {t("home.manageFamilies")}
-          </Link>
+    <main className="workspace-home" id="main-content">
+      <HomeLaunchpad locale={locale} />
+      <details className="workspace-portfolio">
+        <summary>
+          {locale === "sv"
+            ? "Dina varumärken och publicering"
+            : "Your brands & publishing overview"}{" "}
+          <span>
+            {locale === "sv"
+              ? "Öppna för att planera mellan dina verksamheter"
+              : "Open when you want to plan across your businesses"}
+          </span>
+        </summary>
+        <h2 className="text-lg font-semibold">{t("home.title")}</h2>
+        <p className="mt-1 text-sm text-[var(--color-ink-muted)]">
+          {t("home.intro", {
+            from: day(week.from),
+            to: day(new Date(week.to.getTime() - 86_400_000)),
+          })}
         </p>
-      )}
+        {families.length === 0 && (
+          <p className="mt-6 text-sm text-[var(--color-ink-muted)]">
+            {t("home.noFamilies")}{" "}
+            <Link href="/families" className={ACTION}>
+              {t("home.manageFamilies")}
+            </Link>
+          </p>
+        )}
 
-      <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {familyCards.map(({ family, brands, counts }) => (
-          <section key={family.id} className={CARD} aria-labelledby={`family-${family.id}`}>
-            <h2
-              id={`family-${family.id}`}
-              className="text-base font-semibold text-[var(--color-ink)]"
-            >
-              {family.name}
-            </h2>
-            <Counts counts={counts} scheduled={t("home.scheduled")} posted={t("home.posted")} />
-            <BrandChips brands={brands} empty={t("home.noBrands")} />
-            <div className="flex flex-wrap gap-4">
-              <Link
-                href={`/calendar?view=week&family=${encodeURIComponent(family.id)}`}
-                className={ACTION}
+        <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {familyCards.map(({ family, brands, counts }) => (
+            <section key={family.id} className={CARD} aria-labelledby={`family-${family.id}`}>
+              <h2
+                id={`family-${family.id}`}
+                className="text-base font-semibold text-[var(--color-ink)]"
               >
-                {t("home.calendar")}
-              </Link>
-              <Link href="/posts/new" className={ACTION}>
-                {t("home.newPost")}
-              </Link>
-            </div>
-          </section>
-        ))}
-      </div>
+                {family.name}
+              </h2>
+              <Counts counts={counts} scheduled={t("home.scheduled")} posted={t("home.posted")} />
+              <BrandChips brands={brands} empty={t("home.noBrands")} />
+              <div className="flex flex-wrap gap-4">
+                <Link
+                  href={`/calendar?view=week&family=${encodeURIComponent(family.id)}`}
+                  className={ACTION}
+                >
+                  {t("home.calendar")}
+                </Link>
+                <Link href="/posts/new" className={ACTION}>
+                  {t("home.newPost")}
+                </Link>
+              </div>
+            </section>
+          ))}
+        </div>
 
-      {brandCards.length > 0 && (
-        <>
-          <h2 className="mt-10 text-sm font-semibold tracking-wide text-[var(--color-ink-muted)] uppercase">
-            {t("home.unfamilied")}
-          </h2>
-          <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {brandCards.map(({ brand, counts }) => (
-              <section key={brand.id} className={CARD}>
-                <div>
-                  <Link
-                    href={`/brand/${brand.id}`}
-                    className="text-base font-semibold text-[var(--color-ink)] hover:text-[var(--color-accent)]"
-                  >
-                    {brand.name}
-                  </Link>
-                  <p className="mt-1 text-sm text-[var(--color-ink-muted)]">{brand.niche}</p>
-                </div>
-                <Counts counts={counts} scheduled={t("home.scheduled")} posted={t("home.posted")} />
-              </section>
-            ))}
-          </div>
-        </>
-      )}
+        {brandCards.length > 0 && (
+          <>
+            <h2 className="mt-10 text-sm font-semibold tracking-wide text-[var(--color-ink-muted)] uppercase">
+              {t("home.unfamilied")}
+            </h2>
+            <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {brandCards.map(({ brand, counts }) => (
+                <section key={brand.id} className={CARD}>
+                  <div>
+                    <Link
+                      href={`/brand/${brand.id}`}
+                      className="text-base font-semibold text-[var(--color-ink)] hover:text-[var(--color-accent)]"
+                    >
+                      {brand.name}
+                    </Link>
+                    <p className="mt-1 text-sm text-[var(--color-ink-muted)]">{brand.niche}</p>
+                  </div>
+                  <Counts
+                    counts={counts}
+                    scheduled={t("home.scheduled")}
+                    posted={t("home.posted")}
+                  />
+                </section>
+              ))}
+            </div>
+          </>
+        )}
+      </details>
     </main>
   );
 }

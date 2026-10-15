@@ -176,14 +176,17 @@ export function ClipRow({
               clipId={clip.id}
             />
           )}
-          {canManage && clip.platform === "youtube" && clip.status === "failed" && (
-            <RetryClipButton
-              clipId={clip.id}
-              action={retryClipAction}
-              label={t("inbox.retry")}
-              retryingLabel={t("inbox.retrying")}
-            />
-          )}
+          {canManage &&
+            clip.platform === "youtube" &&
+            clip.purpose !== "learn" &&
+            (clip.status === "failed" || clip.status === "unprocessed") && (
+              <RetryClipButton
+                clipId={clip.id}
+                action={retryClipAction}
+                label={t("inbox.retry")}
+                retryingLabel={t("inbox.retrying")}
+              />
+            )}
           {canManage && (
             <form action={dismissClipAction.bind(null, clip.id)}>
               <ConfirmSubmitButton

@@ -4,7 +4,7 @@ import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import { sources } from "@/db/schema";
-import { requireOwner } from "@/lib/auth/session";
+import { requireOwner, requireUser } from "@/lib/auth/session";
 import { upsertChannelSource, upsertPlaylistSource } from "@/lib/ingest/store";
 import { YouTubeDataClient } from "@/lib/youtube/data-api";
 import { parseYouTubeUrl } from "@/lib/youtube/url";
@@ -20,6 +20,7 @@ export async function addSource(
   _prev: AddSourceResult | null,
   formData: FormData,
 ): Promise<AddSourceResult> {
+  await requireUser();
   const url = String(formData.get("url") ?? "").trim();
   if (!url) return { ok: false, error: "Paste a channel or playlist URL." };
 
@@ -54,6 +55,7 @@ export async function addSource(
  * title is unhelpful, not a permanent rename.
  */
 export async function renameSource(id: number, formData: FormData): Promise<void> {
+  await requireUser();
   const title = String(formData.get("title") ?? "").trim();
   if (!title) return;
   await db
@@ -65,6 +67,7 @@ export async function renameSource(id: number, formData: FormData): Promise<void
 
 /** Pause = active=false, never delete. Preserves last_polled_at as the poll cursor. */
 export async function setSourceActive(id: number, active: boolean): Promise<void> {
+  await requireOwner("change channel automation");
   await db.update(sources).set({ active }).where(eq(sources.id, id));
   revalidatePath("/youtube/sources");
 }

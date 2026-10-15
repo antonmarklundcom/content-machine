@@ -6,107 +6,195 @@ import { getLocale } from "@/lib/i18n/server";
 import { translator } from "@/lib/i18n";
 import { LocaleToggle } from "./LocaleToggle";
 import { SpendMeter } from "./SpendMeter";
-import { HeaderNav, type NavItem } from "./HeaderNav";
+import { HeaderNav, type NavItem, type NavLink } from "./HeaderNav";
 
 export async function Header() {
   const [locale, user] = await Promise.all([getLocale(), getSession()]);
   const t = translator(locale);
-
-  // Signed out (the login page renders inside this layout): no nav to offer and
-  // no spend figure to leak. Reading spendStatus() unconditionally would also
-  // put MySQL in the path of the one page that must work when things are broken.
+  // The login page must work without querying spend or exposing private totals.
   const status = user ? await spendStatus() : null;
-
-  // Final order (PLAN.md §6.S20): the daily loop first, then research and the
-  // older tools. The wordmark is the home link (families and this week).
+  const copy = (en: string, sv: string) => (locale === "sv" ? sv : en);
+  const tool = (href: string, label: string, description?: string): NavLink => ({
+    href,
+    label,
+    description,
+  });
   const nav: NavItem[] = [
-    { href: "/posts", label: t("header.posts") },
-    { href: "/calendar", label: t("header.calendar") },
-    { href: "/media", label: t("header.media") },
+    tool("/", copy("Start here", "Börja här")),
     {
-      label: t("header.accounts"),
+      label: copy("1 · Save & learn", "1 · Spara & lär"),
+      description: copy(
+        "Collect links, then turn them into useful lessons.",
+        "Samla länkar och gör dem till användbara lärdomar.",
+      ),
       items: [
-        { href: "/accounts", label: t("header.accounts") },
-        { href: "/brands", label: t("header.accounts.brands"), also: ["/brand"] },
-        { href: "/families", label: t("header.accounts.families") },
-      ],
-    },
-    { href: "/hooks", label: t("header.hooks") },
-    {
-      label: t("header.inbox"),
-      items: [
-        { href: "/inbox", label: t("header.inbox"), also: ["/clips", "/share"] },
-        { href: "/learn", label: t("header.learn") },
-      ],
-    },
-    {
-      label: t("header.research"),
-      items: [
-        { href: "/research", label: t("header.research.outliers") },
-        { href: "/research/report", label: t("header.research.report") },
-        { href: "/research/questions", label: t("header.research.questions") },
-        { href: "/research/compare", label: t("header.research.compare") },
-        { href: "/research/gaps", label: t("header.research.gaps") },
-        { href: "/lessons", label: t("header.lessons") },
-      ],
-    },
-    {
-      label: t("header.studio"),
-      items: [
-        { href: "/studio", label: t("header.studio.scripts") },
-        { href: "/studio/plan", label: t("header.studio.plan") },
-        { href: "/studio/listing", label: t("header.studio.listing") },
-        { href: "/video", label: t("header.studio.video") },
-        { href: "/higgsfield", label: t("header.studio.higgsfield") },
-      ],
-    },
-    // Build 4 (docs/PLAN-build4.md): voice, cuentos stories and the Guaraní glossary.
-    {
-      label: t("header.voice"),
-      items: [
-        { href: "/stories", label: t("header.voice.stories") },
-        { href: "/voice", label: t("header.voice.profiles") },
-        { href: "/voice/test", label: t("header.voice.test") },
-        { href: "/voice/record", label: t("header.voice.record") },
-        { href: "/voice/pronunciations", label: t("header.voice.pronunciations") },
-        { href: "/voice/dataset", label: t("header.voice.dataset") },
-        { href: "/glossary", label: t("header.voice.glossary") },
+        {
+          ...tool(
+            "/inbox",
+            copy("Save a link", "Spara en länk"),
+            copy(
+              "Your YouTube, Instagram and idea inbox",
+              "Din inkorg för YouTube, Instagram och idéer",
+            ),
+          ),
+          also: ["/clips", "/share"],
+        },
+        tool(
+          "/learn",
+          copy("My learning library", "Mitt lärbibliotek"),
+          copy("Read lessons, resources and next steps", "Läs lärdomar, resurser och nästa steg"),
+        ),
+        tool(
+          "/youtube/ingest",
+          copy("Import YouTube videos", "Importera YouTube-videor"),
+          copy("Add a video, playlist or channel", "Lägg till en video, spellista eller kanal"),
+        ),
+        tool(
+          "/youtube",
+          copy("YouTube digest", "YouTube-översikt"),
+          copy(
+            "Browse imported videos and analyses",
+            "Bläddra bland importerade videor och analyser",
+          ),
+        ),
+        tool(
+          "/youtube/sources",
+          copy("Follow channels", "Följ kanaler"),
+          copy("Choose sources for monitoring", "Välj källor att bevaka"),
+        ),
       ],
     },
     {
-      label: t("header.engage"),
+      label: copy("2 · Create", "2 · Skapa"),
+      description: copy(
+        "Choose a brand and turn what you know into content.",
+        "Välj ett varumärke och skapa innehåll av det du vet.",
+      ),
       items: [
-        { href: "/results", label: t("header.engage.results") },
-        { href: "/comments", label: t("header.engage.comments") },
+        tool(
+          "/posts",
+          copy("Posts & drafts", "Inlägg & utkast"),
+          copy("Write and review your social content", "Skriv och granska ditt innehåll"),
+        ),
+        tool(
+          "/studio",
+          copy("Video scripts", "Videomanus"),
+          copy("Prepare what to say on camera", "Förbered vad du ska säga i kameran"),
+        ),
+        tool(
+          "/studio/listing",
+          copy("Property scripts", "Fastighetsmanus"),
+          copy(
+            "Turn listing details into a property tour",
+            "Gör bostadsdetaljer till en visningsvideo",
+          ),
+        ),
+        tool(
+          "/facts",
+          copy("Facts & references", "Fakta & referenser"),
+          copy(
+            "Keep trusted information for your brands",
+            "Spara tillförlitlig information för dina varumärken",
+          ),
+        ),
+        tool(
+          "/hooks",
+          t("header.hooks"),
+          copy("Find an opening for your next post", "Hitta en inledning till nästa inlägg"),
+        ),
+        tool(
+          "/media",
+          t("header.media"),
+          copy("Find your photos, clips and assets", "Hitta dina foton, klipp och filer"),
+        ),
       ],
     },
-    { href: "/facts", label: t("header.facts") },
     {
-      label: t("header.youtube"),
+      label: copy("3 · Plan & publish", "3 · Planera & publicera"),
+      description: copy(
+        "Organize your week and review what works.",
+        "Planera din vecka och se vad som fungerar.",
+      ),
       items: [
-        { href: "/youtube", label: t("nav.digest") },
-        { href: "/youtube/topics", label: t("nav.topics") },
-        { href: "/youtube/marks", label: t("nav.marks") },
-        { href: "/youtube/sources", label: t("nav.sources") },
-        { href: "/youtube/ingest", label: t("nav.ingest") },
+        tool(
+          "/calendar",
+          copy("Content calendar", "Innehållskalender"),
+          copy("See your scheduled content", "Se ditt planerade innehåll"),
+        ),
+        tool(
+          "/studio/plan",
+          copy("Filming plan", "Inspelningsplan"),
+          copy("Prepare your next recording session", "Förbered nästa inspelning"),
+        ),
+        tool(
+          "/accounts",
+          copy("Connected accounts", "Anslutna konton"),
+          copy("Manage publishing connections", "Hantera anslutningar för publicering"),
+        ),
+        tool(
+          "/results",
+          copy("Results", "Resultat"),
+          copy("Review content performance", "Granska hur innehållet presterar"),
+        ),
+        tool(
+          "/comments",
+          t("header.engage.comments"),
+          copy("Review conversations and replies", "Granska samtal och svar"),
+        ),
       ],
     },
-    { href: "/settings", label: t("header.settings") },
+    {
+      label: copy("More tools", "Fler verktyg"),
+      description: copy(
+        "Research, brands, production and settings.",
+        "Research, varumärken, produktion och inställningar.",
+      ),
+      items: [
+        tool(
+          "/settings",
+          t("header.settings"),
+          copy("Automation controls and integrations", "Automatisering och integrationer"),
+        ),
+        { ...tool("/brands", t("header.accounts.brands")), also: ["/brand"] },
+        tool("/families", t("header.accounts.families")),
+        tool("/research", t("header.research.outliers")),
+        tool("/research/instagram", copy("Instagram research", "Instagram-research")),
+        tool("/research/report", t("header.research.report")),
+        tool("/research/questions", t("header.research.questions")),
+        tool("/research/compare", t("header.research.compare")),
+        tool("/research/gaps", t("header.research.gaps")),
+        tool("/lessons", t("header.lessons")),
+        tool("/youtube/topics", t("nav.topics")),
+        tool("/youtube/marks", t("nav.marks")),
+        tool("/video", t("header.studio.video")),
+        tool("/higgsfield", t("header.studio.higgsfield")),
+        tool("/stories", t("header.voice.stories")),
+        tool("/voice", t("header.voice.profiles")),
+        tool("/voice/test", t("header.voice.test")),
+        tool("/voice/record", t("header.voice.record")),
+        tool("/voice/pronunciations", t("header.voice.pronunciations")),
+        tool("/voice/dataset", t("header.voice.dataset")),
+        tool("/glossary", t("header.voice.glossary")),
+      ],
+    },
   ];
 
   return (
-    <header className="surface-border sticky top-0 z-10 border-x-0 border-t-0 bg-[var(--color-surface)]/95 backdrop-blur">
-      <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-4 px-6 py-4">
-        <div className="flex items-center gap-8">
-          <Link
-            href="/"
-            className="whitespace-nowrap text-sm font-semibold tracking-tight text-[var(--color-ink)]"
+    <header className="surface-border sticky top-0 z-30 border-x-0 border-t-0 bg-[var(--color-surface)]/95 backdrop-blur-xl">
+      <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-5 py-4 sm:px-8">
+        <Link
+          href="/"
+          className="flex items-center gap-2.5 rounded-xl text-base font-semibold tracking-tight text-[var(--color-ink)] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--color-accent)]"
+        >
+          <span
+            aria-hidden="true"
+            className="grid h-9 w-9 place-items-center rounded-xl bg-[var(--color-accent)] text-base text-white shadow-sm"
           >
-            {t("app.name")}
-          </Link>
-          {user && <HeaderNav nav={nav} />}
-        </div>
-        <div className="flex items-center gap-5">
+            ✦
+          </span>
+          {t("app.name")}
+        </Link>
+        <div className="flex w-full items-center justify-between gap-2 sm:w-auto sm:justify-start sm:gap-5">
           <LocaleToggle locale={locale} />
           {status && <SpendMeter status={status} locale={locale} />}
           {user && (
@@ -114,7 +202,7 @@ export async function Header() {
               <button
                 type="submit"
                 title={user.email}
-                className="rounded-[var(--radius-sm)] px-2 py-1 text-xs font-medium text-[var(--color-ink-muted)] transition-colors hover:text-[var(--color-ink)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]"
+                className="rounded-lg px-2 py-1 text-xs font-medium text-[var(--color-ink-muted)] transition-colors hover:text-[var(--color-ink)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]"
               >
                 {t("login.signOut")}
               </button>
@@ -122,6 +210,15 @@ export async function Header() {
           )}
         </div>
       </div>
+      {user && (
+        <div className="mx-auto max-w-6xl px-5 pb-3 sm:px-8">
+          <HeaderNav
+            nav={nav}
+            label={copy("Your content workflow", "Ditt innehållsflöde")}
+            menuLabel={copy("Menu & tools", "Meny & verktyg")}
+          />
+        </div>
+      )}
     </header>
   );
 }

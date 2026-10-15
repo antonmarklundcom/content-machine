@@ -3,6 +3,7 @@ import type { GenerateContentResponse } from "@google/genai";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { analyses, screenings, transcripts, videos, type Video } from "@/db/schema";
+import { automaticVideoCondition } from "@/lib/automation/sql";
 import { gemini, readUsage, responseText, THINKING_LEVEL } from "@/lib/analysis/run";
 import {
   DEFAULT_MODEL,
@@ -248,8 +249,12 @@ async function recordScreening(input: {
  * outside that set would be paying to triage work that is not queued: a video
  * with no captions is never analysed whatever a screening thinks of it.
  */
-export async function findUnscreenedVideos(limit = 100): Promise<Video[]> {
-  return findScreenableVideos(limit);
+export async function findUnscreenedVideos(
+  limit = 100,
+  automatic = false,
+  includeUntracked = false,
+): Promise<Video[]> {
+  return findScreenableVideos(limit, { automatic, includeUntracked });
 }
 
 /**
@@ -263,7 +268,7 @@ export async function findUnscreenedVideos(limit = 100): Promise<Video[]> {
  */
 export async function findScreenableVideos(
   limit = 100,
-  options: { includeScreened?: boolean } = {},
+  options: { includeScreened?: boolean; automatic?: boolean; includeUntracked?: boolean } = {},
 ): Promise<Video[]> {
   return db
     .select()
@@ -271,6 +276,7 @@ export async function findScreenableVideos(
     .where(
       and(
         eq(videos.captionStatus, "available"),
+        options.automatic ? automaticVideoCondition(options.includeUntracked) : undefined,
         sql`exists (select 1 from ${transcripts} where ${transcripts.videoId} = ${videos.id})`,
         sql`not exists (
           select 1 from ${analyses}
@@ -304,7 +310,10 @@ export type ScreenRunResult = {
  */
 export async function screenVideos(
   subjects: Video[],
-  options: ScreenOptions & { onProgress?: (result: ScreenResult) => void } = {},
+  options: ScreenOptions & {
+    onProgress?: (result: ScreenResult) => void;
+    canContinue?: (video: Video) => Promise<boolean>;
+  } = {},
 ): Promise<ScreenRunResult> {
   const minScore = screenMinScore();
   const empty: ScreenRunResult = {
@@ -332,6 +341,7 @@ export async function screenVideos(
         next += 1;
         if (index >= subjects.length) return;
         try {
+          if (options.canContinue && !(await options.canContinue(subjects[index]!))) continue;
           const result = await withSpendAttempt(() =>
             screenVideo(subjects[index]!, { ...options, model }),
           );

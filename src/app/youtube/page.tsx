@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { Metadata } from "next";
 import { isOwner } from "@/lib/auth/roles";
 import { requireUser } from "@/lib/auth/session";
@@ -109,6 +110,25 @@ export default async function Home({ searchParams }: { searchParams: Promise<Sea
           <p className="max-w-md text-sm text-[var(--color-ink-muted)] leading-relaxed">
             {t(hasFilters ? "digest.noMatch.body" : "digest.empty.body")}
           </p>
+          {!hasFilters && (
+            <div className="mt-4 flex flex-wrap justify-center gap-3">
+              <Link href="/youtube/ingest" className="workspace-button">
+                Import your first video <span aria-hidden>↗</span>
+              </Link>
+              <Link
+                href="/inbox"
+                className="surface-border rounded-xl px-5 py-3 text-sm font-medium"
+              >
+                Just save a link
+              </Link>
+            </div>
+          )}
+          {!hasFilters && (
+            <p className="mt-3 max-w-md text-xs leading-relaxed text-[var(--color-ink-muted)]">
+              Start with one useful video. Import it, check its transcript, then analyse it when
+              your AI provider is configured.
+            </p>
+          )}
         </div>
       ) : (
         <>

@@ -198,19 +198,32 @@ test("filtering by status: listIdeas, counts and GET ?status=", async () => {
     posted: 2,
   });
 
-  const response = await GET(
-    new Request(`http://localhost/api/ideas?brandId=${BRAND}&status=posted`),
+  const response = await callRoute(
+    GET,
+    new Request(`http://localhost/api/ideas?brandId=${BRAND}&status=posted`, {
+      headers: { cookie: owner },
+    }),
   );
   const body = (await response.json()) as { id: number; status: string }[];
   assert.equal(body.length, 2);
   assert.ok(body.every((i) => i.status === "posted"));
 
   const all = (await (
-    await GET(new Request(`http://localhost/api/ideas?brandId=${BRAND}`))
+    await callRoute(
+      GET,
+      new Request(`http://localhost/api/ideas?brandId=${BRAND}`, { headers: { cookie: owner } }),
+    )
   ).json()) as unknown[];
   assert.equal(all.length, 4, "without ?page the list is unpaged, as before");
   assert.equal(
-    (await GET(new Request(`http://localhost/api/ideas?brandId=${BRAND}&status=nope`))).status,
+    (
+      await callRoute(
+        GET,
+        new Request(`http://localhost/api/ideas?brandId=${BRAND}&status=nope`, {
+          headers: { cookie: owner },
+        }),
+      )
+    ).status,
     400,
   );
 });

@@ -1,3 +1,4 @@
+import { authoringApiGuard } from "@/lib/auth/api-guard";
 import { revalidatePath } from "next/cache";
 import { ingestUrl, type IngestProgress } from "@/lib/ingest";
 import { BULK_INGEST_LIMIT } from "@/lib/ingest/limits";
@@ -14,7 +15,7 @@ import { parseYouTubeUrl } from "@/lib/youtube/url";
  *
  * Bulk ingest costs nothing (metadata and captions are free), so it stays open
  * to an employee under PLAN.md §9 PR-24 — the route is behind the session
- * middleware, which is the check it needs. It never analyses.
+ * middleware and re-checked against the current user row here. It never analyses.
  *
  * Single videos deliberately do NOT come here. That path also analyses, which
  * means a spend check, and duplicating that in a second place is how the two
@@ -55,6 +56,8 @@ function toWire(event: IngestProgress): WireProgress {
 }
 
 export async function POST(request: Request): Promise<Response> {
+  const denied = await authoringApiGuard();
+  if (denied) return denied;
   let url: string;
   try {
     const body = (await request.json()) as { url?: unknown };

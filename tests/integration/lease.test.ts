@@ -139,7 +139,7 @@ test("npm run yt:poll exits 0 with 'already running' while the lease is held", a
 
   const { stdout } = await promisify(execFile)(
     process.execPath,
-    ["--import", "tsx", "scripts/poll-sources.ts", "--no-analyze"],
+    ["--conditions=react-server", "--import", "tsx", "scripts/poll-sources.ts", "--no-analyze"],
     { env: { ...process.env }, timeout: 60_000 },
   );
   assert.match(stdout, /already running/);

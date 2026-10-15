@@ -1,5 +1,6 @@
 import { updateReturning, upsertReturning } from "@/db/mutations";
 import "server-only";
+import { isAutomationAllowed } from "@/lib/automation/store";
 import { eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
@@ -164,7 +165,10 @@ async function markFailed(clipId: number, error: string): Promise<Clip> {
  * link, and quietly ingesting 200 videos from a saved link is not what saving a
  * link means. Adding it as a tracked source is a deliberate act in /youtube.
  */
-export async function processYouTubeClip(clip: Clip): Promise<Clip> {
+export async function processYouTubeClip(
+  clip: Clip,
+  options: { automatic?: boolean } = {},
+): Promise<Clip> {
   const ref = parseYouTubeUrl(clip.url);
   if (!ref) return markFailed(clip.id, "Not a recognisable YouTube URL.");
   if (ref.kind !== "video") {
@@ -229,6 +233,15 @@ export async function processYouTubeClip(clip: Clip): Promise<Clip> {
   }
 
   try {
+    if (options.automatic && !(await isAutomationAllowed("captureAnalysis"))) {
+      const [saved] = await updateReturning(
+        db,
+        clips,
+        { status: "unprocessed", error: null },
+        eq(clips.id, clip.id),
+      );
+      return saved;
+    }
     const estimatedUsd = estimateAnalysisCostUsd(transcript.wordCount, DEFAULT_MODEL);
     // Same call, same cap, as the single-video form path in ingest.actions.ts.
     // `analyzeVideo` no-ops when this video already has an analysis, so a

@@ -1,4 +1,5 @@
 import "server-only";
+import { boundedSourceText, factsSourceUrl } from "./source-url";
 import {
   upsertFamilyFacts,
   type FamilyFactRow,
@@ -195,20 +196,30 @@ export async function importFacts(
 /** Largest source accepted, from a URL or an upload. The real file is ~100 KB. */
 export const MAX_SOURCE_BYTES = 2_000_000;
 
-/** Read a source over http(s): the raw GitHub URL on Anton's PC. */
+/** Read only trusted raw GitHub sources; uploads remain available for other files. */
 export async function fetchFactsSource(url: string): Promise<string> {
-  if (!httpUrl(url))
-    throw new FactsImportError("The source must be an http(s) URL or a file path.");
-  let res: Response;
+  let source: URL;
   try {
-    res = await fetch(url, { signal: AbortSignal.timeout(20_000), redirect: "follow" });
+    source = factsSourceUrl(url);
   } catch (err) {
-    throw new FactsImportError(
-      `Could not fetch ${url}: ${err instanceof Error ? err.message : String(err)}`,
-    );
+    throw new FactsImportError(err instanceof Error ? err.message : "Invalid source URL.");
   }
-  if (!res.ok) throw new FactsImportError(`Fetching ${url} returned HTTP ${res.status}.`);
-  const text = await res.text();
-  if (text.length > MAX_SOURCE_BYTES) throw new FactsImportError("The source file is too large.");
-  return text;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 20_000);
+  try {
+    const res = await fetch(source.href, { signal: controller.signal, redirect: "error" });
+    if (!res.ok) {
+      await res.body?.cancel();
+      throw new FactsImportError(`Fetching the source returned HTTP ${res.status}.`);
+    }
+    return await boundedSourceText(res, MAX_SOURCE_BYTES);
+  } catch (err) {
+    controller.abort();
+    if (err instanceof FactsImportError) throw err;
+    throw new FactsImportError(
+      `Could not fetch the source: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  } finally {
+    clearTimeout(timeout);
+  }
 }

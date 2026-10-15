@@ -6,6 +6,7 @@ import { db, schema } from "@/db";
 import { PATCH } from "@/app/api/ideas/[id]/route";
 
 import { resetTables, teardown } from "./setup";
+import { callRoute, signIn } from "./route";
 
 /**
  * `posted` and `posted_at` (PLAN.md §1.23). The stamp describes the current
@@ -29,19 +30,24 @@ async function seedIdea(): Promise<number> {
   return idea.id;
 }
 
+let cookie = "";
+
 async function patch(id: number, body: unknown) {
-  const response = await PATCH(
+  const response = await callRoute(
+    (request) => PATCH(request, { params: Promise.resolve({ id: String(id) }) }),
     new Request(`http://localhost/api/ideas/${id}`, {
       method: "PATCH",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", cookie },
       body: JSON.stringify(body),
     }),
-    { params: Promise.resolve({ id: String(id) }) },
   );
   return { status: response.status, body: (await response.json()) as Record<string, unknown> };
 }
 
-beforeEach(resetTables);
+beforeEach(async () => {
+  await resetTables();
+  cookie = (await signIn("owner")).cookie;
+});
 after(teardown);
 
 test("posted stamps posted_at, a repeat keeps it, leaving clears it", async () => {

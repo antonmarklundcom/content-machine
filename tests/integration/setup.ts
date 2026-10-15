@@ -4,6 +4,7 @@ import { createPool, type PoolConnection, type RowDataPacket } from "mysql2/prom
 
 import { closeDb } from "@/db";
 import { databaseOptions } from "@/db/driver";
+import { requireDisposableTestDatabase } from "@/db/test-database-guard";
 import { resetFakeGemini } from "@/lib/ai-fake";
 
 /**
@@ -15,9 +16,12 @@ let prepared: Promise<void> | undefined;
 
 /** Bring the active MariaDB migration folder up to date once per process. */
 export function prepareDatabase(): Promise<void> {
+  // Validate on every call, including when migration work is already cached.
+  const url = requireDisposableTestDatabase(
+    process.env.DATABASE_URL,
+    process.env.ALLOW_DESTRUCTIVE_TEST_DB,
+  );
   prepared ??= (async () => {
-    const url = process.env.DATABASE_URL;
-    if (!url) throw new Error("DATABASE_URL was not validated by tests/integration/preload.mjs.");
     const pool = createPool(databaseOptions(url));
     try {
       await migrate(drizzle(pool), { migrationsFolder: "./drizzle-mysql" });
@@ -35,10 +39,14 @@ export function prepareDatabase(): Promise<void> {
  * truncate fails.
  */
 export async function resetTables(): Promise<void> {
+  // Never rely on preload: callers may import this helper directly or change env.
+  const url = requireDisposableTestDatabase(
+    process.env.DATABASE_URL,
+    process.env.ALLOW_DESTRUCTIVE_TEST_DB,
+  );
   resetFakeGemini();
   await prepareDatabase();
-  const url = process.env.DATABASE_URL;
-  if (!url) throw new Error("DATABASE_URL disappeared after preload validation.");
+
   const pool = createPool(databaseOptions(url));
   let connection: PoolConnection | undefined;
   try {
@@ -57,6 +65,21 @@ export async function resetTables(): Promise<void> {
     } finally {
       await connection.query("SET FOREIGN_KEY_CHECKS = 1");
     }
+    // Explicit synthetic enabled fixture for legacy workflow tests. Production
+    // defaults remain disabled; automation tests override/delete this row.
+    await connection.query(
+      "INSERT INTO application_settings (`key`, `value`, `updated_at`) VALUES (?, ?, current_timestamp(3))",
+      [
+        "automation",
+        JSON.stringify({
+          enabled: true,
+          youtubeMonitoring: true,
+          captureAnalysis: true,
+          learningSummaries: true,
+          publishing: true,
+        }),
+      ],
+    );
   } finally {
     connection?.release();
     await pool.end();

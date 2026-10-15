@@ -2,13 +2,15 @@ import "server-only";
 import { and, asc, eq, isNull } from "drizzle-orm";
 
 import { db } from "@/db";
-import { clips, type Clip } from "@/db/schema";
+import { clips, videos, type Clip } from "@/db/schema";
 import { normalizeTags } from "@/lib/clips/save";
 import { configuredLanguages, configuredStrategies } from "@/lib/ingest/captions";
 import { withLease } from "@/lib/lease";
+import { isAutomationAllowed } from "@/lib/automation/store";
 import { SpendCapExceededError } from "@/lib/spend";
 import { fetchListing } from "@/lib/studio/listing";
 import { fetchCaptions } from "@/lib/youtube/captions";
+import { YouTubeDataClient } from "@/lib/youtube/data-api";
 import { parseVideoId } from "@/lib/youtube/url";
 
 import { fetchRepoReadme, findGithubRepoUrl, githubRepoFromUrl } from "./github";
@@ -44,6 +46,7 @@ export type LearnDeps = {
   run: LearnModelRunner;
   fetchPage: (url: string) => Promise<{ title: string | null; description: string | null } | null>;
   fetchReadme: (repoUrl: string) => Promise<string | null>;
+  fetchVideoDescription?: (videoId: string) => Promise<string | null>;
   fetchCaptions: (videoId: string) => Promise<string | null>;
   describeScreenshot: (
     fileId: string,
@@ -53,6 +56,17 @@ export type LearnDeps = {
 
 export const defaultLearnDeps: LearnDeps = {
   run: defaultLearnRunner,
+  fetchVideoDescription: async (videoId) => {
+    const [video] = await db
+      .select({ description: videos.description })
+      .from(videos)
+      .where(eq(videos.youtubeId, videoId))
+      .limit(1);
+    if (video?.description) return video.description;
+    if (!process.env.YOUTUBE_API_KEY) return null;
+    const resolved = await new YouTubeDataClient().resolve({ kind: "video", videoId });
+    return resolved?.kind === "video" ? resolved.video.description : null;
+  },
   fetchPage: async (url) => {
     try {
       const page = await fetchListing(url);
@@ -116,6 +130,14 @@ export async function gatherLearnInput(
 
   if (!noLink) {
     const videoId = clip.platform === "youtube" ? parseVideoId(clip.url) : null;
+    if (videoId && deps.fetchVideoDescription) {
+      try {
+        const description = await deps.fetchVideoDescription(videoId);
+        if (description) caption = [caption, description].filter(Boolean).join("\n\n");
+      } catch {
+        // Stored metadata is optional; a note/transcript remains useful.
+      }
+    }
     if (videoId && !transcript) transcript = await deps.fetchCaptions(videoId);
     if (!videoId || !title) {
       const page = await deps.fetchPage(clip.url);
@@ -187,9 +209,15 @@ async function processHeld(clip: Clip, deps: LearnDeps): Promise<LearnOutcome> {
         title: clip.title ?? input.title?.slice(0, 512) ?? summary.title,
         summary: learnSummaryText(summary),
         howToStart: summary.howToStart,
+        learnDetails: {
+          takeaways: summary.takeaways,
+          resources: summary.resources,
+          limitations: summary.limitations,
+        },
         learnCategory: summary.category,
         tags: normalizeTags([...clip.tags, ...summary.tags]),
         transcript: clip.transcript ?? input.transcript ?? null,
+        postText: clip.postText ?? input.caption ?? null,
         error: null,
       })
       .where(eq(clips.id, clip.id));
@@ -254,6 +282,7 @@ export async function eligibleLearnClipIds(
 /** The `npm run learn:process` loop. Stops at the first spend-cap refusal. */
 export async function processLearnClips(
   options: {
+    automatic?: boolean;
     limit?: number;
     force?: boolean;
     retryFailed?: boolean;
@@ -264,6 +293,8 @@ export async function processLearnClips(
   const outcomes: LearnOutcome[] = [];
   let costUsd = 0;
   for (const id of await eligibleLearnClipIds(options)) {
+    if (options.automatic && !(await isAutomationAllowed("learningSummaries")))
+      return { outcomes, costUsd, stoppedEarly: "Automatic learning summaries are paused." };
     const outcome = await processLearnClip(id, { force: options.force, deps: options.deps });
     outcomes.push(outcome);
     options.onOutcome?.(outcome);

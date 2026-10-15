@@ -120,7 +120,7 @@ export default async function InboxPage({ searchParams }: { searchParams: Promis
       </div>
 
       <div className="surface-border surface-card mb-6 p-5">
-        <QuickAddClipForm />
+        <QuickAddClipForm locale={locale} />
         <p className="mt-3 text-xs text-[var(--color-ink-muted)]">{t("capture.hashtagHint")}</p>
       </div>
 

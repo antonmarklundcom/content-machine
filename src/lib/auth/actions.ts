@@ -29,7 +29,7 @@ export async function login(_prev: LoginResult | null, formData: FormData): Prom
   if (!user || !valid) return { ok: false, error: "Wrong email or password." };
 
   await startSession(user.id);
-  redirect("/youtube");
+  redirect("/");
 }
 
 export async function logout(): Promise<void> {

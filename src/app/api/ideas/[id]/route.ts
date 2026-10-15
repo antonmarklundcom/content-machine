@@ -1,15 +1,21 @@
+import { authoringApiGuard } from "@/lib/auth/api-guard";
 import { NextResponse } from "next/server";
 import { schema } from "../../../../db";
 import { isIdeaStatus, updateIdea, type IdeaUpdate } from "@/lib/bridge";
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const denied = await authoringApiGuard();
+  if (denied) return denied;
   const { id } = await params;
   const ideaId = Number(id);
-  if (!Number.isInteger(ideaId)) {
+  if (!/^\d+$/.test(id) || !Number.isSafeInteger(ideaId) || ideaId <= 0) {
     return NextResponse.json({ error: "invalid idea id" }, { status: 400 });
   }
 
-  const body = await request.json();
+  const body = await request.json().catch(() => null);
+  if (typeof body !== "object" || body === null || Array.isArray(body)) {
+    return NextResponse.json({ error: "send a JSON object" }, { status: 400 });
+  }
   const update: IdeaUpdate = {};
 
   if (body.status !== undefined) {
