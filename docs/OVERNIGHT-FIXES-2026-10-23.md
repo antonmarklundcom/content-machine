@@ -20,6 +20,7 @@ This implementation follows inspection of merged main `f3414ac8`. It belongs to 
 
 ## Additional safeguards
 
+- Final manual CI identified vulnerable Next.js 15.5.27. The narrow patch updates Next.js to 15.5.28 and sharp's minimum to 0.35.5 with a refreshed lockfile. Official advisories describe [conditional image-optimization RCE on glibc Linux](https://github.com/vercel/next.js/security/advisories/GHSA-2464-fhr4-w9xw) and [Server Actions denial of service](https://github.com/vercel/next.js/security/advisories/GHSA-p3m5-59mp-jv5r). Dependency audit and final Linux builds are validated separately; no exploit was sent to any live service.
 - Login throttling uses opaque database keys: eight attempts per normalized account and 120 total in a 15-minute database-clock window. Old counters expire. No forwarded-IP trust or new schema is needed.
 - Logout persists an opaque revocation before deleting its cookie. A persistence failure preserves safe retry and returns visible feedback. Session DB errors fail closed. Expired APIs return JSON 401; pages retain canonical login redirects.
 - Subscription CLI execution refuses online mode and bounds output. Cancellation targets a live owned Windows tree or the owned POSIX group; POSIX group cancellation also handles exited wrappers and SIGTERM-resistant descendants. An already exited Windows wrapper with inherited-pipe descendants remains a conditional recovery gap. Feedback reports cancellation requested rather than guaranteeing every descendant stopped. Tests launch synthetic Node programs only.
