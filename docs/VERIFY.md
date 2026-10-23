@@ -24,6 +24,13 @@ npm run test:worker
 
 Run only the applicable subset for a narrow change. After confirming a dedicated disposable MariaDB URL and setting ALLOW_DESTRUCTIVE_TEST_DB=1, use npm run test:db. The database name must end in _test and the host must be loopback or explicitly test-allowlisted. Never use operational data. npm run verify combines app types, lint/format, unit tests, native database tests and build; it does not include the separate worker or production-audit commands.
 
+Recovery rehearsals: after restoring a database dump into a new `*_restore_test`
+database, compare `CHECKSUM TABLE ... EXTENDED` for every table, and compare media with
+`npm run media:verify-restore -- ABSOLUTE_SOURCE ABSOLUTE_RESTORED` (read-only; both
+`_private` marker folders are required). On Windows, `npm test` also exercises the CLI
+Job Object containment with synthetic Node processes only. See
+[RELEASE-HANDOFF-2026-10-23.md](RELEASE-HANDOFF-2026-10-23.md).
+
 ## Optional manual native CI
 
 The retained workflow provisions MariaDB 10.11 and 11.4 and runs clean installation, production audit, app/worker checks, full native tests, SQL backup/restoration, production build and physical standalone validation. It also retains Windows checks. Explicitly start it from Actions → CI → Run workflow, or select the branch with:
