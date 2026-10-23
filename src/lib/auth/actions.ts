@@ -8,7 +8,8 @@ import { verifyPassword } from "./password";
 import { endSession, startSession } from "./session";
 import { clearLoginAttempts, consumeLoginAttempt } from "./throttle";
 
-export type LoginResult = { ok: false; error: string };
+/** `email` echoes the visitor's own input so a failed attempt does not clear it. */
+export type LoginResult = { ok: false; error: string; email?: string };
 
 /**
  * Login (PLAN.md §9 PR-23).
@@ -23,15 +24,22 @@ export async function login(_prev: LoginResult | null, formData: FormData): Prom
     .toLowerCase();
   const password = String(formData.get("password") ?? "");
 
-  if (!email || !password) return { ok: false, error: "Enter an email and a password." };
+  // The same echo for every cause, so it reveals nothing about which accounts exist.
+  const typed = email.length <= 255 ? email : undefined;
+  if (!email || !password)
+    return { ok: false, error: "Enter an email and a password.", email: typed };
   if (email.length > 255 || password.length > 1024)
-    return { ok: false, error: "Wrong email or password." };
+    return { ok: false, error: "Wrong email or password.", email: typed };
   if (!(await consumeLoginAttempt(email)))
-    return { ok: false, error: "Too many sign-in attempts. Try again in 15 minutes." };
+    return {
+      ok: false,
+      error: "Too many sign-in attempts. Try again in 15 minutes.",
+      email: typed,
+    };
 
   const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
   const valid = await verifyPassword(password, user?.passwordHash ?? null);
-  if (!user || !valid) return { ok: false, error: "Wrong email or password." };
+  if (!user || !valid) return { ok: false, error: "Wrong email or password.", email: typed };
   await clearLoginAttempts(email);
 
   await startSession(user.id);

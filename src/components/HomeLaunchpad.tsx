@@ -22,6 +22,9 @@ const swedish: Record<string, string> = {
   "Next: open your saved lessons to process and review them.":
     "Nästa steg: öppna dina sparade lärdomar för att bearbeta och granska dem.",
   "Open lessons": "Öppna lärdomar",
+  "Next: your saved links wait in the inbox. The owner processes and reviews lessons.":
+    "Nästa steg: dina sparade länkar finns i inkorgen. Ägaren bearbetar och granskar lärdomarna.",
+  "Owner step": "Ägarens steg",
   "Make Paraguay easier to understand.": "Gör Paraguay lättare att förstå.",
   "Give your next property a story.": "Ge nästa bostad en berättelse.",
   "Start with your residency brand and approved facts. Build a post, then a script when you’re ready to film.":
@@ -77,7 +80,11 @@ const tasks = [
   { id: "property", label: "Real estate content", symbol: "⌂" },
 ] as const;
 
-export function HomeLaunchpad({ locale }: { locale: Locale }) {
+/**
+ * `owner` only changes guidance: staff are not sent to owner-only pages as
+ * their next step. Every permission is still enforced on the server.
+ */
+export function HomeLaunchpad({ locale, owner = true }: { locale: Locale; owner?: boolean }) {
   const copy = (text: string) => (locale === "sv" ? (swedish[text] ?? text) : text);
   const [task, setTask] = useState<(typeof tasks)[number]["id"]>("save");
   return (
@@ -139,10 +146,27 @@ export function HomeLaunchpad({ locale }: { locale: Locale }) {
                 </p>
                 <QuickAddClipForm locale={locale} />
                 <div className="workspace-after-save">
-                  <span>{copy("Next: open your saved lessons to process and review them.")}</span>
-                  <Link href="/learn">
-                    {copy("Open lessons")} <span aria-hidden>↗</span>
-                  </Link>
+                  {owner ? (
+                    <>
+                      <span>
+                        {copy("Next: open your saved lessons to process and review them.")}
+                      </span>
+                      <Link href="/learn">
+                        {copy("Open lessons")} <span aria-hidden>↗</span>
+                      </Link>
+                    </>
+                  ) : (
+                    <>
+                      <span>
+                        {copy(
+                          "Next: your saved links wait in the inbox. The owner processes and reviews lessons.",
+                        )}
+                      </span>
+                      <Link href="/inbox">
+                        {copy("Open inbox")} <span aria-hidden>↗</span>
+                      </Link>
+                    </>
+                  )}
                 </div>
               </>
             ) : (
@@ -202,9 +226,11 @@ export function HomeLaunchpad({ locale }: { locale: Locale }) {
             <span className="workspace-eyebrow">{copy("A SIMPLE WAY THROUGH")}</span>
             <h2 id="journey-title">{copy("From “save this” to “use this”.")}</h2>
           </div>
-          <Link className="workspace-text-link" href="/settings">
-            {copy("Check setup & automation")} <span aria-hidden>↗</span>
-          </Link>
+          {owner && (
+            <Link className="workspace-text-link" href="/settings">
+              {copy("Check setup & automation")} <span aria-hidden>↗</span>
+            </Link>
+          )}
         </div>
         <ol className="workspace-journey-grid">
           {[
@@ -221,6 +247,7 @@ export function HomeLaunchpad({ locale }: { locale: Locale }) {
               copy: "Review takeaways, useful links and steps to put into practice.",
               href: "/learn",
               action: "Review lessons",
+              ownerOnly: true,
             },
             {
               number: "03",
@@ -241,9 +268,13 @@ export function HomeLaunchpad({ locale }: { locale: Locale }) {
               <span className="workspace-step-number">{step.number}</span>
               <h3>{copy(step.title)}</h3>
               <p>{copy(step.copy)}</p>
-              <Link href={step.href}>
-                {copy(step.action)} <span aria-hidden>→</span>
-              </Link>
+              {"ownerOnly" in step && step.ownerOnly && !owner ? (
+                <span className="text-sm text-[var(--color-ink-muted)]">{copy("Owner step")}</span>
+              ) : (
+                <Link href={step.href}>
+                  {copy(step.action)} <span aria-hidden>→</span>
+                </Link>
+              )}
             </li>
           ))}
         </ol>

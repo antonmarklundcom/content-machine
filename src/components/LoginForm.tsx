@@ -23,7 +23,8 @@ export function LoginForm({ locale }: { locale: Locale }) {
           name="email"
           required
           autoComplete="username"
-          autoFocus
+          autoFocus={!state?.email}
+          defaultValue={state?.email ?? ""}
           className={FIELD}
         />
       </label>
@@ -34,6 +35,8 @@ export function LoginForm({ locale }: { locale: Locale }) {
           name="password"
           required
           autoComplete="current-password"
+          // After a failed attempt the email is kept, so the password is next.
+          autoFocus={Boolean(state?.email)}
           className={FIELD}
         />
       </label>

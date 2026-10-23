@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { HomeLaunchpad } from "@/components/HomeLaunchpad";
+import { isOwner } from "@/lib/auth/roles";
+import { getSession } from "@/lib/auth/session";
 import type { Brand } from "@/db/schema";
 import {
   countPostsByStatus,
@@ -34,11 +36,12 @@ const ACTION =
 /** Home (PLAN.md §6.S20): one card per family with this week's scheduled and posted counts. */
 export default async function HomePage() {
   const week = thisWeek(new Date());
-  const [families, activeBrands, t, locale] = await Promise.all([
+  const [families, activeBrands, t, locale, user] = await Promise.all([
     listFamiliesWithBrands(),
     listBrands(),
     getTranslator(),
     getLocale(),
+    getSession(),
   ]);
   const count = async (scope: Omit<PostsQuery, "page" | "status" | "statuses" | "from" | "to">) => {
     const byStatus = await countPostsByStatus({ ...scope, ...week });
@@ -61,8 +64,8 @@ export default async function HomePage() {
   );
 
   return (
-    <main className="workspace-home" id="main-content">
-      <HomeLaunchpad locale={locale} />
+    <main className="workspace-home">
+      <HomeLaunchpad locale={locale} owner={isOwner(user)} />
       <details className="workspace-portfolio">
         <summary>
           {locale === "sv"

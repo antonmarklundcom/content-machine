@@ -179,8 +179,16 @@ export async function Header() {
     },
   ];
 
+  // Sticky only when there is room: at 200% zoom on a laptop the header would
+  // otherwise cover about 40% of the visible page.
   return (
-    <header className="surface-border sticky top-0 z-30 border-x-0 border-t-0 bg-[var(--color-surface)]/95 backdrop-blur-xl">
+    <header className="surface-border relative top-0 z-30 border-x-0 [@media(min-height:560px)]:sticky border-t-0 bg-[var(--color-surface)]/95 backdrop-blur-xl">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:rounded-[var(--radius-sm)] focus:bg-[var(--color-surface-raised)] focus:px-3 focus:py-2 focus:text-sm focus:text-[var(--color-ink)] focus:outline-2 focus:outline-[var(--color-accent)]"
+      >
+        {t("header.skip")}
+      </a>
       <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-5 py-4 sm:px-8">
         <Link
           href="/"

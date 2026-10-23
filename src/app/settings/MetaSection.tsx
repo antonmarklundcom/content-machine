@@ -186,7 +186,7 @@ export async function MetaSection({
           <ul className="mt-1 space-y-1">
             {uris.map((u) => (
               <li key={u}>
-                <code className="select-all rounded bg-black/5 px-1.5 py-0.5 text-xs dark:bg-white/10">
+                <code className="select-all break-all rounded bg-black/5 px-1.5 py-0.5 text-xs dark:bg-white/10">
                   {u}
                 </code>
               </li>

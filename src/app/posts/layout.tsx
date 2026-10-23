@@ -13,5 +13,6 @@ export const dynamic = "force-dynamic";
 
 /** Posts and the post pack (PLAN.md §6.S15). Header and <html lang> come from the root layout. */
 export default function PostsLayout({ children }: { children: React.ReactNode }) {
-  return children;
+  // The pages here render plain containers; this gives them their main landmark.
+  return <main>{children}</main>;
 }
