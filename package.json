@@ -23,6 +23,7 @@
     "studio:weekly": "tsx --conditions=react-server scripts/weekly-report.ts",
     "media:scan": "tsx --conditions=react-server scripts/media-scan.ts",
     "media:prune": "tsx --conditions=react-server scripts/media-prune.ts",
+    "media:verify-restore": "node scripts/verify-media-restore.mjs",
     "facts:import": "tsx --conditions=react-server scripts/facts-import.ts",
     "clips:fetch": "tsx --conditions=react-server scripts/clips-fetch.ts",
     "meta:sync": "tsx --conditions=react-server scripts/meta-sync.ts",

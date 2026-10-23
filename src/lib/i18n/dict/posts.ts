@@ -69,6 +69,7 @@ export const en = {
     "Pick the account it goes out on, then an approved idea or a topic. The draft follows the brand kit, the account's language and the platform playbook.",
   "posts.ownerOnly": "Only the owner can draft posts: it spends from the monthly cap.",
   "posts.noAccounts": "No social accounts yet. Add one to a brand first.",
+  "posts.noAccountsAction": "Open brands to add an account (no connection needed)",
   "posts.field.account": "Account",
   "posts.field.source": "Start from",
   "posts.source.idea": "An idea",
@@ -264,6 +265,8 @@ export const sv: Record<keyof typeof en, string> = {
     "Välj kontot det publiceras på, sedan en godkänd idé eller ett ämne. Utkastet följer varumärkets kit, kontots språk och plattformens spelbok.",
   "posts.ownerOnly": "Bara ägaren kan skriva inlägg: det kostar från månadstaket.",
   "posts.noAccounts": "Inga sociala konton än. Lägg till ett på ett varumärke först.",
+  "posts.noAccountsAction":
+    "Öppna varumärken för att lägga till ett konto (ingen anslutning krävs)",
   "posts.field.account": "Konto",
   "posts.field.source": "Utgå från",
   "posts.source.idea": "En idé",

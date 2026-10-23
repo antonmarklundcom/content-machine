@@ -53,7 +53,12 @@ export default async function NewPostPage({
         <p className="mt-3 text-sm text-[var(--color-warn)]">{t("posts.ownerOnly")}</p>
       )}
       {accounts.length === 0 ? (
-        <p className="mt-6 text-sm text-[var(--color-ink-muted)]">{t("posts.noAccounts")}</p>
+        <p className="mt-6 text-sm text-[var(--color-ink-muted)]">
+          {t("posts.noAccounts")}{" "}
+          <Link href="/brands" className="text-[var(--color-accent)] underline">
+            {t("posts.noAccountsAction")} &rarr;
+          </Link>
+        </p>
       ) : (
         <PostNewForm
           accounts={accounts.map((a) => ({

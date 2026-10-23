@@ -7,6 +7,13 @@ export const en = {
     "The connection was interrupted. Your link and note are still here. Retry to confirm the save.",
   "capture.error.receipt":
     "The save could not be confirmed. Your link and note are still here. Retry to confirm the save.",
+  "capture.duplicate.unchanged": "Already in your inbox. Nothing new was created.",
+  "capture.duplicate.note":
+    "Already in your inbox. Nothing new was created; your note replaced the earlier one.",
+  "capture.duplicate.otherPurpose":
+    "Already in your inbox as {purpose}. Nothing new was created and it was not moved; change its purpose in the inbox if needed.",
+  "capture.duplicate.otherPurposeNote":
+    "Already in your inbox as {purpose}. Your note replaced the earlier one; it was not moved. Change its purpose in the inbox if needed.",
   "capture.title": "Capture",
   "capture.filter.allBrands": "All brands",
   "capture.filter.allPurposes": "All purposes",
@@ -43,6 +50,13 @@ export const sv: Record<keyof typeof en, string> = {
     "Anslutningen avbröts. Din länk och notering finns kvar. Försök igen för att bekräfta att det sparats.",
   "capture.error.receipt":
     "Det gick inte att bekräfta att länken sparats. Din länk och notering finns kvar. Försök igen för att bekräfta.",
+  "capture.duplicate.unchanged": "Finns redan i inkorgen. Inget nytt skapades.",
+  "capture.duplicate.note":
+    "Finns redan i inkorgen. Inget nytt skapades; din anteckning ersatte den tidigare.",
+  "capture.duplicate.otherPurpose":
+    "Finns redan i inkorgen som {purpose}. Inget nytt skapades och den flyttades inte; ändra syftet i inkorgen vid behov.",
+  "capture.duplicate.otherPurposeNote":
+    "Finns redan i inkorgen som {purpose}. Din anteckning ersatte den tidigare; den flyttades inte. Ändra syftet i inkorgen vid behov.",
   "capture.title": "Fånga",
   "capture.filter.allBrands": "Alla varumärken",
   "capture.filter.allPurposes": "Alla syften",

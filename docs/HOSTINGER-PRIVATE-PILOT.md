@@ -137,6 +137,8 @@ unknown files in bulk. If privacy storage is unavailable, reconnect/restore its
 matched backup first: the library remains closed while classification cannot be
 proved. Recheck classification after restoring any private source backup.
 
+After restoring media into a separate folder, `npm run media:verify-restore -- SOURCE RESTORED` checks the bytes and both marker folders without writing. Release, rollback and recovery steps for the current main are in [RELEASE-HANDOFF-2026-10-23.md](RELEASE-HANDOFF-2026-10-23.md).
+
 Pause automation before rollback and retain provider/job IDs. Use a matched code/schema/media/key backup. Older code can read an additive schema, but keep source references and do not drop the new columns/table casually. Research exported to Markdown is useful portability, not a database backup.
 
 ## Release verification

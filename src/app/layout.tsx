@@ -28,7 +28,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <body className="min-h-screen antialiased">
         <Header />
         {protectedPage && <WorkspaceGuide locale={locale} />}
-        {children}
+        {/* Target of the header's skip link; focusable so the jump moves keyboard focus. */}
+        <div id="main-content" tabIndex={-1} className="outline-none">
+          {children}
+        </div>
       </body>
     </html>
   );

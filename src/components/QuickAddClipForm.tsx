@@ -3,8 +3,9 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { postClientJson } from "@/lib/client-json";
+import { captureReceipt } from "@/lib/clips/receipt";
 import { useTranslator } from "@/lib/i18n/client";
-import { translator, type Locale } from "@/lib/i18n";
+import { translator, type Locale, type TranslationKey } from "@/lib/i18n";
 import { ResultMessage } from "./ResultMessage";
 
 const FIELD =
@@ -51,7 +52,19 @@ export function QuickAddClipForm({ locale }: { locale?: Locale } = {}) {
           });
           return;
         }
-        setResult({ tone: "success", text: t("inbox.quickAdd.saved") });
+        const receipt = captureReceipt(response.data, {
+          note,
+          purpose: learning ? "learn" : undefined,
+        });
+        setResult({
+          tone: "success",
+          text:
+            "purpose" in receipt
+              ? t(receipt.key, {
+                  purpose: t(`capture.purpose.${receipt.purpose}` as TranslationKey),
+                })
+              : t(receipt.key),
+        });
         setUrl("");
         setNote("");
         router.refresh();

@@ -13,5 +13,6 @@ export const dynamic = "force-dynamic";
 
 /** The script studio (PLAN.md §6.S12). Header and <html lang> come from the root layout (§1.22). */
 export default function StudioLayout({ children }: { children: React.ReactNode }) {
-  return children;
+  // The pages here render plain containers; this gives them their main landmark.
+  return <main>{children}</main>;
 }

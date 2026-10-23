@@ -1,6 +1,7 @@
 /** Header nav groups and the links under them (PLAN.md §6.S9). `nav.ts` is pinned by the O6 key snapshot, so these live here. */
 
 export const en = {
+  "header.skip": "Skip to content",
   "header.research": "Research",
   "header.research.outliers": "Outliers",
   "header.research.report": "Report",
@@ -42,6 +43,7 @@ export const en = {
 } as const;
 
 export const sv: Record<keyof typeof en, string> = {
+  "header.skip": "Hoppa till innehållet",
   "header.research": "Research",
   "header.research.outliers": "Avvikare",
   "header.research.report": "Rapport",
