@@ -2,6 +2,9 @@
 
 export const en = {
   "header.skip": "Skip to content",
+  // Login password visibility toggle (app.ts keys are pinned by the O6 snapshot).
+  "login.showPassword": "Show",
+  "login.hidePassword": "Hide",
   "header.research": "Research",
   "header.research.outliers": "Outliers",
   "header.research.report": "Report",
@@ -44,6 +47,8 @@ export const en = {
 
 export const sv: Record<keyof typeof en, string> = {
   "header.skip": "Hoppa till innehållet",
+  "login.showPassword": "Visa",
+  "login.hidePassword": "Dölj",
   "header.research": "Research",
   "header.research.outliers": "Avvikare",
   "header.research.report": "Rapport",
