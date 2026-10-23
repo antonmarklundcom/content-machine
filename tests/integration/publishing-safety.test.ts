@@ -1,5 +1,6 @@
 import { insertReturning } from "@/db/mutations";
 import assert from "node:assert/strict";
+import { approveSharedMediaIdentity } from "@/lib/media/privacy";
 import { after, afterEach, beforeEach, test } from "node:test";
 import { createPool } from "mysql2/promise";
 import { createRequire } from "node:module";
@@ -140,6 +141,7 @@ async function image() {
     publicUrl: "https://example.invalid/image.png",
     publicExpiresAt: new Date("2027-01-01"),
   });
+  await approveSharedMediaIdentity(a.sha256, process.env.MEDIA_ROOT!);
   assert.ok(await assetOriginal(a), JSON.stringify({ root: process.env.MEDIA_ROOT, asset: a }));
   return a;
 }

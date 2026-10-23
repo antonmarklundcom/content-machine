@@ -1,8 +1,6 @@
-import { upsertReturning } from "@/db/mutations";
-import { eq } from "drizzle-orm";
-import { db } from "@/db";
-import { transcripts, videos, type Video } from "@/db/schema";
+import type { Video } from "@/db/schema";
 import { fetchCaptions, type StrategyName } from "@/lib/youtube/captions";
+import { retainStoredTranscript, storeFetchedCaptions } from "./transcripts";
 
 /**
  * The caption pipeline (PLAN.md §5 row 05): probe -> fetch -> store transcript
@@ -70,19 +68,12 @@ export async function fetchAndStoreCaptions(
   video: Video,
   options: CaptionPipelineOptions = {},
 ): Promise<CaptionOutcome> {
+  if (await retainStoredTranscript(video.id, options.force)) {
+    return { status: "skipped", why: "already-have-transcript" };
+  }
   if (!options.force) {
     if (video.captionStatus === "none" && !options.retryNone) {
       return { status: "skipped", why: "known-no-captions" };
-    }
-    if (video.captionStatus === "available") {
-      const [existing] = await db
-        .select({ id: transcripts.id })
-        .from(transcripts)
-        .where(eq(transcripts.videoId, video.id))
-        .limit(1);
-      // Trust the row, not the status column: a crash between writing the
-      // transcript and updating the status would otherwise strand the video.
-      if (existing) return { status: "skipped", why: "already-have-transcript" };
     }
   }
 
@@ -94,33 +85,21 @@ export async function fetchAndStoreCaptions(
   if (result.ok) {
     const { text, wordCount, languageCode, strategy } = result.result;
 
-    // Order matters: write the transcript first, then flip the status. The
-    // reverse would mark a video 'available' with no transcript behind it if the
-    // process died in between, and the skip path above would never retry it.
-    await upsertReturning(
-      db,
-      transcripts,
-      {
-        videoId: video.id,
-        language: languageCode,
-        source: "captions",
-        wordCount,
-        content: text,
-      },
-      {
-        target: transcripts.videoId,
-        set: { language: languageCode, source: "captions", wordCount, content: text },
-      },
-    );
-
-    await setStatus(video.id, "available");
+    const stored = await storeFetchedCaptions(video.id, {
+      status: "available",
+      language: languageCode,
+      wordCount,
+      content: text,
+    });
+    if (!stored) return { status: "skipped", why: "already-have-transcript" };
     return { status: "available", wordCount, strategy, language: languageCode };
   }
 
   if (result.reason === "no_captions") {
     // Terminal for this video. PLAN.md §0: videos without captions are marked
     // unavailable and skipped — audio transcription is not a v1 fallback.
-    await setStatus(video.id, "none");
+    if (!(await storeFetchedCaptions(video.id, { status: "none" })))
+      return { status: "skipped", why: "already-have-transcript" };
     return { status: "none" };
   }
 
@@ -134,15 +113,9 @@ export async function fetchAndStoreCaptions(
   const detail = result.skipped.length
     ? `${attempted}${attempted ? " " : ""}(retired: ${result.skipped.join(",")})`
     : attempted;
-  await setStatus(video.id, "failed");
+  if (!(await storeFetchedCaptions(video.id, { status: "failed" })))
+    return { status: "skipped", why: "already-have-transcript" };
   return { status: "failed", error: `${result.reason}: ${detail}` };
-}
-
-async function setStatus(videoId: number, status: "available" | "none" | "failed"): Promise<void> {
-  await db
-    .update(videos)
-    .set({ captionStatus: status, captionCheckedAt: new Date() })
-    .where(eq(videos.id, videoId));
 }
 
 export function sleep(ms: number): Promise<void> {

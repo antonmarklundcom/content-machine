@@ -1,5 +1,4 @@
 "use server";
-import { upsertReturning } from "@/db/mutations";
 
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
@@ -18,6 +17,7 @@ import {
 import { ingestUrl } from "@/lib/ingest";
 import { BULK_INGEST_LIMIT } from "@/lib/ingest/limits";
 import { upsertVideoFromMetadata } from "@/lib/ingest/store";
+import { storeManualTranscript } from "@/lib/ingest/transcripts";
 import { parseYouTubeUrl } from "@/lib/youtube/url";
 import { YouTubeDataClient } from "@/lib/youtube/data-api";
 
@@ -30,10 +30,6 @@ import { YouTubeDataClient } from "@/lib/youtube/data-api";
 export type IngestFormResult =
   | { ok: true; tone: "success" | "info"; message: string }
   | { ok: false; tone: "error"; error: string };
-
-function wordCount(text: string): number {
-  return text.trim().split(/\s+/).filter(Boolean).length;
-}
 
 export async function submitIngest(
   _prev: IngestFormResult | null,
@@ -72,22 +68,7 @@ export async function submitIngest(
       }
       video = await upsertVideoFromMetadata(resolved.video, null);
 
-      const words = wordCount(transcriptText);
-      await upsertReturning(
-        db,
-        transcripts,
-        {
-          videoId: video.id,
-          language: null,
-          source: "manual",
-          wordCount: words,
-          content: transcriptText,
-        },
-        {
-          target: transcripts.videoId,
-          set: { source: "manual", wordCount: words, content: transcriptText },
-        },
-      );
+      await storeManualTranscript(video.id, transcriptText);
     } else if (ref.kind === "video") {
       const summary = await ingestUrl(url);
       const [stored] = summary.videos;

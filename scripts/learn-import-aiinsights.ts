@@ -12,13 +12,21 @@
 import { readFile } from "node:fs/promises";
 import { closeDb } from "../src/db";
 import { importAiinsights, readAiinsightsItems, type AiinsightsRow } from "../src/lib/learn/import";
+import { legacySourceTypes, type LegacyPgTypes } from "../src/lib/learn/legacy-pg";
 
 type LegacyClient = {
   query(text: string): Promise<{ rows: AiinsightsRow[] }>;
   release(): void;
 };
 type LegacyPool = { connect(): Promise<LegacyClient>; end(): Promise<void> };
-type LegacyPg = { Pool: new (options: { connectionString: string; max: number }) => LegacyPool };
+type LegacyPg = {
+  Pool: new (options: {
+    connectionString: string;
+    max: number;
+    types: LegacyPgTypes;
+  }) => LegacyPool;
+  types: LegacyPgTypes;
+};
 
 function arg(name: string): string | undefined {
   const i = process.argv.indexOf(name);
@@ -60,7 +68,11 @@ async function sourceRows(): Promise<AiinsightsRow[]> {
       "The optional pg CLI dependency is unavailable. Install development dependencies or use --json <export.json>.",
     );
   }
-  const pool = new legacy.Pool({ connectionString: url, max: 1 });
+  const pool = new legacy.Pool({
+    connectionString: url,
+    max: 1,
+    types: legacySourceTypes(legacy.types),
+  });
   let client: LegacyClient | undefined;
   try {
     client = await pool.connect();

@@ -1,7 +1,8 @@
-import { spawn } from "node:child_process";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { assertOnPc } from "@/lib/pc-only";
+import { killChildTree, spawnCli } from "@/lib/higgsfield/process";
 
 /**
  * Subscription mode (§1.38): instead of paying per token through the Gemini
@@ -27,6 +28,7 @@ export function aiProvider(env: Env = process.env): AiProvider {
 
 /** A CLI run is slow (it may search the web); a hung one must still end. */
 export const CLI_TIMEOUT_MS = 10 * 60 * 1000;
+export const MAX_CLI_OUTPUT_BYTES = 2 * 1024 * 1024;
 
 export function buildCliPrompt(
   system: string,
@@ -99,32 +101,58 @@ export function unwrapClaudeEnvelope(stdout: string): string {
   return stdout;
 }
 
-function run(cmd: CliCommand, input: string, timeoutMs: number): Promise<string> {
+function run(
+  cmd: CliCommand,
+  input: string,
+  timeoutMs: number,
+  maxOutputBytes: number,
+): Promise<string> {
   return new Promise((resolve, reject) => {
-    const child = spawn(cmd.bin, cmd.args, {
-      // npm-installed CLIs are .cmd shims on Windows, which need a shell.
-      shell: process.platform === "win32",
-      stdio: ["pipe", "pipe", "pipe"],
-    });
+    const child = spawnCli(cmd.bin, cmd.args, { cwd: process.cwd() });
     let stdout = "";
     let stderr = "";
-    const timer = setTimeout(() => {
-      child.kill();
-      reject(
-        new Error(`${cmd.bin} did not answer within ${Math.round(timeoutMs / 60000)} minutes.`),
-      );
-    }, timeoutMs);
-    child.stdout.on("data", (d) => (stdout += d));
-    child.stderr.on("data", (d) => (stderr += d));
-    child.on("error", (err) => {
+    let bytes = 0;
+    let settled = false;
+    const stop = (error: Error) => {
+      if (settled) return;
+      settled = true;
       clearTimeout(timer);
-      reject(
+      killChildTree(child);
+      reject(error);
+    };
+    const timer = setTimeout(
+      () =>
+        stop(
+          new Error(
+            `${cmd.bin} did not answer within ${Math.round(timeoutMs / 60000)} minutes. Cancellation was requested for its owned process tree.`,
+          ),
+        ),
+      timeoutMs,
+    );
+    const collect = (value: Buffer, target: "stdout" | "stderr") => {
+      if (settled) return;
+      bytes += value.length;
+      if (bytes > maxOutputBytes)
+        return stop(
+          new Error(
+            "The CLI exceeded its output limit. Cancellation was requested for its owned process tree.",
+          ),
+        );
+      if (target === "stdout") stdout += value.toString();
+      else stderr += value.toString();
+    };
+    child.stdout?.on("data", (d: Buffer) => collect(d, "stdout"));
+    child.stderr?.on("data", (d: Buffer) => collect(d, "stderr"));
+    child.on("error", (err) => {
+      stop(
         new Error(
           `Could not start "${cmd.bin}" (${err.message}). Is it installed and logged in? See docs/SUBSCRIPTION-MODE.md.`,
         ),
       );
     });
     child.on("close", (code) => {
+      if (settled) return;
+      settled = true;
       clearTimeout(timer);
       if (code !== 0) {
         reject(
@@ -134,7 +162,8 @@ function run(cmd: CliCommand, input: string, timeoutMs: number): Promise<string>
         );
       } else resolve(stdout);
     });
-    child.stdin.end(input);
+    child.stdin?.on("error", (error) => stop(error));
+    child.stdin?.end(input);
   });
 }
 
@@ -149,19 +178,28 @@ export async function runCliJson(opts: {
   schema: unknown;
   webSearch: boolean;
   timeoutMs?: number;
+  maxOutputBytes?: number;
 }): Promise<string> {
+  assertOnPc("Subscription CLI generation");
   const input = buildCliPrompt(opts.system, opts.prompt, opts.schema, opts.webSearch);
   const timeoutMs = opts.timeoutMs ?? CLI_TIMEOUT_MS;
+  const maxOutputBytes = Math.min(
+    MAX_CLI_OUTPUT_BYTES,
+    Math.max(1, opts.maxOutputBytes ?? MAX_CLI_OUTPUT_BYTES),
+  );
 
   if (opts.provider === "claude-cli") {
-    const stdout = await run(claudeCommand(opts.webSearch), input, timeoutMs);
+    const stdout = await run(claudeCommand(opts.webSearch), input, timeoutMs, maxOutputBytes);
     return extractJson(unwrapClaudeEnvelope(stdout));
   }
 
   const dir = await mkdtemp(path.join(tmpdir(), "ce-codex-"));
   const outFile = path.join(dir, "answer.txt");
   try {
-    const stdout = await run(codexCommand(outFile), input, timeoutMs);
+    const stdout = await run(codexCommand(outFile), input, timeoutMs, maxOutputBytes);
+    const info = await stat(outFile).catch(() => null);
+    if (info && info.size > maxOutputBytes)
+      throw new Error("The CLI answer file exceeded its output limit.");
     const answer = await readFile(outFile, "utf8").catch(() => stdout);
     return extractJson(answer);
   } finally {

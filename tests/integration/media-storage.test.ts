@@ -25,6 +25,8 @@ import { GET as serveThumb } from "@/app/api/media/asset/[id]/thumb/route";
 import { publishCopy, prunePublic } from "@/lib/media/public";
 import { registerFile, sha256File } from "@/lib/media/register";
 import { scanMediaRoot } from "@/lib/media/scan";
+import { preserveOriginal } from "@/lib/media/originals";
+import { getAsset, listAssets } from "@/lib/bridge/assets";
 import { hostingerDriver } from "@/lib/storage/hostinger";
 
 import { callRoute, signIn } from "./route";
@@ -320,6 +322,165 @@ test("the asset routes serve a library file and its thumbnail to authenticated a
     .where(eq(schema.assets.id, id));
   writeFileSync(path.join(base, "outside.png"), png);
   assert.equal((await get(serveAsset, String(id), { cookie: owner })).status, 404);
+});
+
+test("private voice files and previously indexed originals cannot enter or bypass the shared library", async () => {
+  const source = write("voice/_consent/synthetic.png", png);
+  write("voice/_references/synthetic.wav", Buffer.from("RIFF0000WAVEsynthetic reference"));
+  write("voice/_datasets/synthetic/wavs/take1.wav", Buffer.from("RIFF0000WAVEsynthetic dataset"));
+  const cloned = await preserveOriginal(source, root);
+  assert.ok(cloned);
+  const thumbPath = `_thumbs/${cloned.sha.slice(0, 2)}/${cloned.sha}.webp`;
+  write(thumbPath, png);
+  const [old] = await insertReturning(db, schema.assets, {
+    kind: "image",
+    mime: "image/png",
+    bytes: png.length,
+    sha256: cloned.sha,
+    localPath: cloned.rel,
+    thumbPath,
+    source: "import",
+    tags: ["synthetic-private"],
+  });
+  write("public.jpg", jpg);
+  const scan = await scanMediaRoot();
+  assert.equal(scan.status, "ok");
+  assert.equal(
+    (await allAssets()).length,
+    2,
+    "private folders are excluded and old rows preserved for owner audit",
+  );
+  assert.equal((await listAssets()).total, 1);
+  assert.equal(
+    await getAsset(old.id),
+    null,
+    "indexed immutable clone is hidden by content identity",
+  );
+  const registered = await registerFile("voice/_consent/synthetic.png");
+  assert.equal(registered.status === "rejected" && registered.reason, "private_media");
+  write("innocent-alias.png", png);
+  const alias = await registerFile("innocent-alias.png");
+  assert.equal(alias.status === "rejected" && alias.reason, "private_media");
+  const employee = (await signIn("employee")).cookie;
+  for (const cookie of [employee, owner]) {
+    for (const rel of [
+      "voice/_consent/synthetic.png",
+      "voice/_references/synthetic.wav",
+      "voice/_datasets/synthetic/wavs/take1.wav",
+      cloned.rel,
+      thumbPath,
+      "innocent-alias.png",
+    ]) {
+      const response = await callRoute(
+        (r) => serveScriptMedia(r, { params: Promise.resolve({ path: rel.split("/") }) }),
+        new Request(`http://localhost/api/media/${rel}`, { headers: { cookie } }),
+      );
+      assert.equal(response.status, 404, rel);
+    }
+    for (const handler of [serveAsset, serveThumb]) {
+      const response = await callRoute(
+        (r) => handler(r, { params: Promise.resolve({ id: String(old.id) }) }),
+        new Request(`http://localhost/api/media/asset/${old.id}`, { headers: { cookie } }),
+      );
+      assert.equal(response.status, 404);
+    }
+  }
+  rmSync(source);
+  assert.equal(await getAsset(old.id), null, "stored private identity survives source removal");
+});
+
+test("legacy typed render captions download and survive repeated scans without changing identity", async () => {
+  const employee = (await signIn("employee")).cookie;
+  const docs = [
+    [
+      "captions.srt",
+      "application/x-subrip",
+      "1\n00:00:00,000 --> 00:00:01,000\nSynthetic caption\n",
+    ],
+    ["captions.vtt", "text/vtt", "WEBVTT\n\n00:00.000 --> 00:01.000\nSynthetic caption\n"],
+  ];
+  for (const [name, mime, bytes] of docs) {
+    const rel = `renders/synthetic/${name}`;
+    const absolute = write(rel, bytes);
+    const sha = await sha256File(absolute);
+    const [asset] = await insertReturning(db, schema.assets, {
+      kind: "document",
+      mime,
+      bytes: Buffer.byteLength(bytes),
+      sha256: sha,
+      localPath: rel,
+      source: "import",
+      sourceRef: "render:999",
+      tags: ["captions"],
+      status: "approved",
+    });
+    const get = () =>
+      callRoute(
+        (r) => serveAsset(r, { params: Promise.resolve({ id: String(asset.id) }) }),
+        new Request(`http://localhost/api/media/asset/${asset.id}`, {
+          headers: { cookie: employee },
+        }),
+      );
+    assert.equal((await get()).status, 404, "old status alone is not shared provenance");
+    await scanMediaRoot();
+    const first = await get();
+    assert.equal(first.status, 200);
+    assert.equal(await first.text(), bytes);
+    await scanMediaRoot();
+    const saved = await getAsset(asset.id);
+    assert.ok(saved?.localPath?.startsWith("_originals/"));
+    assert.equal(saved?.status, "approved");
+    assert.equal(saved?.sha256, sha);
+    assert.equal((await get()).status, 200);
+    write(saved!.localPath!, "tampered captions");
+    assert.equal((await get()).status, 409);
+  }
+});
+
+test("source-gone legacy immutable originals stay hidden until ordinary-source rescan or explicit owner review", async () => {
+  const source = write("voice/_consent/source-gone.png", png);
+  const original = await preserveOriginal(source, root);
+  assert.ok(original);
+  rmSync(source);
+  const [old] = await insertReturning(db, schema.assets, {
+    kind: "image",
+    mime: "image/png",
+    bytes: png.length,
+    sha256: original.sha,
+    localPath: original.rel,
+    status: "approved",
+    source: "import",
+    tags: ["synthetic-legacy"],
+  });
+  assert.equal(
+    await getAsset(old.id),
+    null,
+    "missing provenance fails closed even with approved status",
+  );
+  assert.equal((await listAssets()).total, 0);
+  const employee = (await signIn("employee")).cookie;
+  const request = () =>
+    callRoute(
+      (r) => serveAsset(r, { params: Promise.resolve({ id: String(old.id) }) }),
+      new Request(`http://localhost/api/media/asset/${old.id}`, { headers: { cookie: employee } }),
+    );
+  assert.equal((await request()).status, 404);
+  await scanMediaRoot();
+  assert.equal(
+    await getAsset(old.id),
+    null,
+    "scanning internal immutable copies cannot invent provenance",
+  );
+  write("ordinary-shared-source.png", png);
+  await scanMediaRoot();
+  assert.ok(await getAsset(old.id), "a surviving ordinary source can establish shared provenance");
+  assert.equal((await request()).status, 200);
+  write("voice/_consent/reappeared.png", png);
+  assert.equal(
+    await getAsset(old.id),
+    null,
+    "a private identity overrides earlier shared provenance",
+  );
 });
 
 // ---------------------------------------------------------------------------

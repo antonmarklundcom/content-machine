@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { rm, stat } from "node:fs/promises";
+import { mkdir, rm, stat } from "node:fs/promises";
 import path from "node:path";
 
 import { binaryAvailable, binaryPath, MISSING_MESSAGE } from "./binaries";
@@ -7,13 +7,17 @@ import { binaryAvailable, binaryPath, MISSING_MESSAGE } from "./binaries";
 /**
  * Transcription sends the file inline, up to `TRANSCRIBE_MAX_INLINE_BYTES`
  * (O11 known issue: no Files API). A longer reel is re-encoded small — 480p,
- * low bitrate, mono audio — into `.media.small.mp4` (a dot-name, so `media:scan` skips it) beside the original. Only
+ * low bitrate, mono audio — into `.media.small.mp4` (a dot-name, so `media:scan` skips it) in the attempt directory. Only
  * the transcript reads that copy; the registered asset stays the original.
  */
 
 export type ShrinkResult = { ok: true; file: string } | { ok: false; error: string };
 
-export async function shrinkForTranscript(file: string, limitBytes: number): Promise<ShrinkResult> {
+export async function shrinkForTranscript(
+  file: string,
+  limitBytes: number,
+  outputDirectory: string,
+): Promise<ShrinkResult> {
   const { size } = await stat(file);
   if (size <= limitBytes) return { ok: true, file };
   if (!(await binaryAvailable("ffmpeg"))) {
@@ -22,7 +26,8 @@ export async function shrinkForTranscript(file: string, limitBytes: number): Pro
       error: `The file is ${Math.round(size / 1024 / 1024)} MB and must be shrunk to transcribe. ${MISSING_MESSAGE.ffmpeg}`,
     };
   }
-  const out = path.join(path.dirname(file), ".media.small.mp4");
+  await mkdir(outputDirectory, { recursive: true });
+  const out = path.join(outputDirectory, ".media.small.mp4");
   await rm(out, { force: true });
   const error = await new Promise<Error | null>((resolve) => {
     execFile(

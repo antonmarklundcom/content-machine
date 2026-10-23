@@ -4,16 +4,22 @@ import { test } from "node:test";
 import { sampleScriptBody } from "@/lib/scripts/fixture";
 import { validateScriptBody } from "@/lib/scripts/contract";
 import {
-  checkListingUrl,
   emptyListing,
-  fetchListing,
   finishListingScript,
   LISTING_PHOTO_PREFIX,
   LISTING_SOURCE_ID,
-  ListingFetchError,
   normalizeListing,
   parseListingHtml,
 } from "./listing";
+
+import { checkListingUrl, fetchListing as readListing, ListingFetchError } from "./listing-fetch";
+
+const fetchListing = (url: string, fetchImpl: typeof fetch, timeoutMs?: number) =>
+  readListing(url, {
+    fetchImpl,
+    timeoutMs,
+    lookup: async () => [{ address: "93.184.215.14", family: 4 }],
+  });
 
 /** A propia.com.py-shaped page: og: tags plus a RealEstateListing whose offer nests the apartment. */
 const PROPIA_HTML = `<!doctype html><html><head>

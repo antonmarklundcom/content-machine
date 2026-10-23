@@ -34,10 +34,22 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
     });
   }
   const secret = process.env.SESSION_SECRET;
+  const deny = () =>
+    request.nextUrl.pathname.startsWith("/api/")
+      ? NextResponse.json(
+          {
+            error:
+              "Your session expired. Sign in again; your unsaved input has not been submitted.",
+            reason: "session_required",
+            login: login.pathname,
+          },
+          { status: 401, headers: { "Cache-Control": "no-store, private" } },
+        )
+      : NextResponse.redirect(login);
   // A missing secret must fail closed. Failing open would silently unlock the
   // whole app the first time someone forgets an env var on a redeploy.
   if (!secret || secret.length < 32) {
-    return NextResponse.redirect(login);
+    return deny();
   }
 
   const token = request.cookies.get(SESSION_COOKIE)?.value;
@@ -47,7 +59,7 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
     return NextResponse.next({ request: { headers: forwarded } });
   }
 
-  return NextResponse.redirect(login);
+  return deny();
 }
 
 export const config = {

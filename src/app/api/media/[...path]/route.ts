@@ -1,5 +1,7 @@
 import { authoringOnly, notFound, serveMediaFile } from "@/lib/media/serve";
 import { isSafeSegment, mediaContentType } from "@/lib/studio/media";
+import { isInternalMediaPath, isPrivateMediaFile } from "@/lib/media/privacy";
+import { NextResponse } from "next/server";
 
 /**
  * GET /api/media/<script id>/<…> — a file Claude Code saved under `media/`
@@ -21,7 +23,20 @@ export async function GET(request: Request, context: { params: Promise<{ path?: 
 
   const segments = (await context.params).path ?? [];
   if (!segments.length || !segments.every(isSafeSegment)) return notFound();
+  const rel = segments.join("/");
+  if (isInternalMediaPath(rel)) return notFound();
+  try {
+    if (await isPrivateMediaFile(rel)) return notFound();
+  } catch {
+    return NextResponse.json(
+      {
+        error: "Media privacy checks unavailable. Reconnect storage and retry.",
+        code: "privacy_unavailable",
+      },
+      { status: 503 },
+    );
+  }
   const type = mediaContentType(segments[segments.length - 1]);
   if (!type) return notFound();
-  return serveMediaFile(request, segments.join("/"), type);
+  return serveMediaFile(request, rel, type);
 }

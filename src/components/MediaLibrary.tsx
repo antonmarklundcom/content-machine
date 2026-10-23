@@ -121,6 +121,12 @@ export async function MediaLibrary({
         </div>
       )}
 
+      {page.privacyUnavailable && drive === "ok" && (
+        <p role="alert" className="mb-4 text-sm text-[var(--color-danger)]">
+          {t("media.privacy.unavailable")}
+        </p>
+      )}
+
       <nav className="mb-4 flex gap-2 border-b border-[var(--color-border-subtle)]">
         {tab("/media", !inbox, t("media.tab.library"))}
         {tab("/media/inbox", inbox, `${t("media.tab.inbox")} (${unsortedCount})`)}
@@ -150,6 +156,9 @@ export async function MediaLibrary({
 
       <p className="mt-4 text-xs text-[var(--color-ink-muted)]">
         {t("media.count", { n: page.total })}
+      </p>
+      <p className="mt-1 max-w-3xl text-xs text-[var(--color-ink-muted)]">
+        {t("media.provenance.hint")}
       </p>
 
       {page.assets.length === 0 ? (

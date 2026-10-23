@@ -4,11 +4,15 @@ import { assertOnPc } from "@/lib/pc-only";
 import { access, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
+import { assertLeaseCurrent, withLeaseCommit, withRenewableLease, type Lease } from "@/lib/lease";
+import { RENDER_LEASE_TTL_MS, renderLeaseName } from "./ownership";
 
 import { db } from "@/db";
 import { assets, videoRenders } from "@/db/schema";
-import { registerFile, sha256File } from "@/lib/media/register";
+import { registerFile } from "@/lib/media/register";
+import { preserveOriginal } from "@/lib/media/originals";
+import { markSharedMediaFile } from "@/lib/media/privacy";
 import { storeImmutableOutput } from "@/lib/media/immutable-output";
 import { mediaRoot, mediaRootMessage, mediaRootStatus, splitRelative } from "@/lib/storage/root";
 
@@ -118,13 +122,14 @@ export async function createRenderRow(req: RenderRequest): Promise<number> {
  * `registerFile`. Returns the asset id.
  */
 async function registerCaptionFile(
-  rel: string,
   absolute: string,
   mime: string,
   meta: { brandId: string | null; sourceRef: string; tags: string[] },
 ): Promise<number> {
-  const sha = await sha256File(absolute);
-  const { size } = await stat(absolute);
+  const original = await preserveOriginal(absolute, mediaRoot(), mime);
+  if (!original) throw new Error("Could not preserve the caption document.");
+  const { sha, bytes: size, rel: originalRel } = original;
+  await markSharedMediaFile(path.relative(mediaRoot(), absolute).split(path.sep).join("/"), sha);
   const [created] = await insertIfAbsent(
     db,
     assets,
@@ -134,7 +139,7 @@ async function registerCaptionFile(
       mime,
       bytes: size,
       sha256: sha,
-      localPath: rel,
+      localPath: originalRel,
       source: "import",
       sourceRef: meta.sourceRef,
       tags: meta.tags,
@@ -144,25 +149,35 @@ async function registerCaptionFile(
   );
   if (created) return created.id;
   const [found] = await db.select().from(assets).where(eq(assets.sha256, sha)).limit(1);
-  const old = found.localPath ? splitRelative(found.localPath) : null;
-  if (!old || !(await exists(path.join(mediaRoot(), ...old)))) {
+  if (found.localPath !== originalRel) {
     await db
       .update(assets)
-      .set({ localPath: rel, updatedAt: new Date() })
+      .set({ localPath: originalRel, updatedAt: new Date() })
       .where(eq(assets.id, found.id));
   }
   return found.id;
 }
 
-async function markFailed(id: number, message: string): Promise<void> {
-  await db
-    .update(videoRenders)
-    .set({ status: "failed", error: message.slice(0, 1024), finishedAt: new Date() })
-    .where(eq(videoRenders.id, id));
+async function markFailed(id: number, message: string, lease: Lease): Promise<void> {
+  await withLeaseCommit(lease, (tx) =>
+    tx
+      .update(videoRenders)
+      .set({ status: "failed", error: message.slice(0, 1024), finishedAt: new Date() })
+      .where(and(eq(videoRenders.id, id), inArray(videoRenders.status, ["queued", "rendering"]))),
+  );
 }
 
 /** Render the row `id` from `req`. Never throws for a render problem: the row says `failed` and why, and so does the rejection. */
 export async function runRender(id: number, req: RenderRequest): Promise<RenderResult> {
+  const held = await withRenewableLease(renderLeaseName(id), RENDER_LEASE_TTL_MS, (lease) =>
+    runOwnedRender(id, req, lease),
+  );
+  if (!held.acquired)
+    throw new RenderRefusedError("This render is already owned by another worker.");
+  return held.value;
+}
+
+async function runOwnedRender(id: number, req: RenderRequest, lease: Lease): Promise<RenderResult> {
   let tmp: string | null = null;
   try {
     const drive = await mediaRootStatus();
@@ -184,16 +199,21 @@ export async function runRender(id: number, req: RenderRequest): Promise<RenderR
     const cameras = resolveCameras(req.scenes);
     const cues = planCues(req.scenes, timeline);
     const plan: RenderPlan = { request: req, timeline, cameras, cues };
-    await db
-      .update(videoRenders)
-      .set({ status: "rendering", startedAt: new Date(), error: null, plan })
-      .where(eq(videoRenders.id, id));
+    const [claimed] = await withLeaseCommit(lease, (tx) =>
+      tx
+        .update(videoRenders)
+        .set({ status: "rendering", startedAt: new Date(), error: null, plan })
+        .where(and(eq(videoRenders.id, id), eq(videoRenders.status, "queued"))),
+    );
+    if (!claimed.affectedRows)
+      throw new RenderRefusedError("This render is no longer queued. Reload before retrying.");
 
     tmp = await mkdtemp(path.join(tmpdir(), "ce-render-"));
     const encode = encodeOptions();
 
     const sceneFiles: string[] = [];
     for (let i = 0; i < req.scenes.length; i++) {
+      await assertLeaseCurrent(lease);
       const scene = req.scenes[i];
       const name = `scene-${String(i + 1).padStart(3, "0")}.mp4`;
       try {
@@ -256,6 +276,7 @@ export async function runRender(id: number, req: RenderRequest): Promise<RenderR
     }
 
     const folder = splitRelative(req.outFolder)!;
+    await assertLeaseCurrent(lease);
     const outDir = path.join(mediaRoot(), ...folder);
     const stem = `${req.outName}-r${id}`;
     const relBase = `${folder.join("/")}/${stem}`;
@@ -281,30 +302,30 @@ export async function runRender(id: number, req: RenderRequest): Promise<RenderR
     }
     const capMeta = { brandId: req.brandId ?? null, sourceRef, tags: [...tags, "captions"] };
     const srtAssetId = await registerCaptionFile(
-      `${relBase}.srt`,
       path.join(outDir, `${stem}.srt`),
       "application/x-subrip",
       capMeta,
     );
     const vttAssetId = await registerCaptionFile(
-      `${relBase}.vtt`,
       path.join(outDir, `${stem}.vtt`),
       "text/vtt",
       capMeta,
     );
 
-    await db
-      .update(videoRenders)
-      .set({
-        status: "done",
-        outputAssetId: video.asset.id,
-        srtAssetId,
-        vttAssetId,
-        durationMs,
-        error: null,
-        finishedAt: new Date(),
-      })
-      .where(eq(videoRenders.id, id));
+    await withLeaseCommit(lease, (tx) =>
+      tx
+        .update(videoRenders)
+        .set({
+          status: "done",
+          outputAssetId: video.asset.id,
+          srtAssetId,
+          vttAssetId,
+          durationMs,
+          error: null,
+          finishedAt: new Date(),
+        })
+        .where(and(eq(videoRenders.id, id), eq(videoRenders.status, "rendering"))),
+    );
 
     return {
       renderId: id,
@@ -315,7 +336,7 @@ export async function runRender(id: number, req: RenderRequest): Promise<RenderR
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    await markFailed(id, message).catch(() => {});
+    await markFailed(id, message, lease).catch(() => {});
     throw err;
   } finally {
     if (tmp) await rm(tmp, { recursive: true, force: true }).catch(() => {});
@@ -337,7 +358,16 @@ export async function enqueueRender(
 ): Promise<{ renderId: number; done: Promise<RenderResult> }> {
   assertOnPc("Rendering a video");
   const renderId = await createRenderRow(req);
-  const done = chain.then(() => runRender(renderId, req));
+  const preceding = chain;
+  // Acquire/heartbeat at enqueue time, including time waiting behind earlier renders.
+  const done = withRenewableLease(renderLeaseName(renderId), RENDER_LEASE_TTL_MS, async (lease) => {
+    await preceding;
+    return runOwnedRender(renderId, req, lease);
+  }).then((result) => {
+    if (!result.acquired)
+      throw new RenderRefusedError("This render is already owned by another worker.");
+    return result.value;
+  });
   chain = done.catch(() => {});
   return { renderId, done };
 }

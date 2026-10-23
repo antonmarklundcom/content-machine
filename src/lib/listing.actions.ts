@@ -24,10 +24,8 @@ import { validateScriptBody, type ScriptBodyV1 } from "@/lib/scripts/contract";
 import { defaultScriptLanguage, isScriptLanguage, loadStyleGuide } from "@/lib/scripts/language";
 import { SpendCapExceededError } from "@/lib/spend";
 import {
-  fetchListing,
   finishListingScript,
   LISTING_MODES,
-  ListingFetchError,
   listingScriptPrompt,
   listingTopic,
   MODE_SPEC,
@@ -35,6 +33,8 @@ import {
   type ListingFields,
   type ListingMode,
 } from "@/lib/studio/listing";
+
+import { fetchListing, ListingFetchError } from "@/lib/studio/listing-fetch";
 
 export type ReadListingResult = { ok: true; listing: ListingFields } | { ok: false; error: string };
 

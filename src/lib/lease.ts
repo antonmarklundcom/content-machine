@@ -15,6 +15,7 @@ import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { leases } from "@/db/schema";
+import type { Tx } from "@/db/mutations";
 
 export type Lease = { name: string; holder: string; expiresAt: Date };
 
@@ -73,13 +74,95 @@ export type LeaseOutcome<T> = { acquired: true; value: T } | { acquired: false }
 export async function withLease<T>(
   name: string,
   ttlMs: number,
-  fn: () => Promise<T>,
+  fn: (lease: Lease) => Promise<T>,
 ): Promise<LeaseOutcome<T>> {
   const lease = await acquireLease(name, ttlMs);
   if (!lease) return { acquired: false };
   try {
-    return { acquired: true, value: await fn() };
+    return { acquired: true, value: await fn(lease) };
   } finally {
     await releaseLease(lease);
   }
+}
+
+export class LeaseLostError extends Error {
+  constructor() {
+    super("This work attempt lost its ownership. Reload before retrying.");
+    this.name = "LeaseLostError";
+  }
+}
+
+/** A stale worker cannot renew or commit after another holder takes ownership. */
+export async function assertLeaseCurrent(lease: Lease): Promise<void> {
+  const [row] = await db
+    .select({ holder: leases.holder })
+    .from(leases)
+    .where(
+      and(
+        eq(leases.name, lease.name),
+        eq(leases.holder, lease.holder),
+        sql`${leases.expiresAt} > current_timestamp(3)`,
+      ),
+    )
+    .limit(1);
+  if (!row) throw new LeaseLostError();
+}
+
+export async function renewLease(lease: Lease, ttlMs: number): Promise<boolean> {
+  const [result] = await db
+    .update(leases)
+    .set({
+      expiresAt: sql`timestampadd(microsecond, ${Math.max(1, Math.round(ttlMs)) * 1000}, current_timestamp(3))`,
+    })
+    .where(
+      and(
+        eq(leases.name, lease.name),
+        eq(leases.holder, lease.holder),
+        sql`${leases.expiresAt} > current_timestamp(3)`,
+      ),
+    );
+  return result.affectedRows > 0;
+}
+
+/** Fence database-only commits under the same lock that serializes takeover. */
+export async function withLeaseCommit<T>(lease: Lease, fn: (tx: Tx) => Promise<T>): Promise<T> {
+  return db.transaction(async (tx) => {
+    const [row] = await tx
+      .select({ holder: leases.holder })
+      .from(leases)
+      .where(
+        and(
+          eq(leases.name, lease.name),
+          eq(leases.holder, lease.holder),
+          sql`${leases.expiresAt} > current_timestamp(3)`,
+        ),
+      )
+      .for("update");
+    if (!row) throw new LeaseLostError();
+    return fn(tx);
+  });
+}
+
+/** Renew only this live owned lease; failure closes the next explicit commit gate. */
+export async function withRenewableLease<T>(
+  name: string,
+  ttlMs: number,
+  fn: (lease: Lease) => Promise<T>,
+): Promise<LeaseOutcome<T>> {
+  return withLease(name, ttlMs, async (lease) => {
+    let inFlight: Promise<unknown> = Promise.resolve();
+    const timer = setInterval(
+      () => {
+        inFlight = inFlight.then(() => renewLease(lease, ttlMs)).catch(() => false);
+      },
+      Math.max(100, Math.min(30_000, Math.floor(ttlMs / 3))),
+    );
+    timer.unref();
+    try {
+      return await fn(lease);
+    } finally {
+      clearInterval(timer);
+      await inFlight;
+    }
+  });
 }

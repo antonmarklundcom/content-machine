@@ -1,16 +1,29 @@
 import "server-only";
-import { readdir, readFile } from "node:fs/promises";
+import { readdir, readFile, realpath } from "node:fs/promises";
 import path from "node:path";
 import { and, eq, isNotNull } from "drizzle-orm";
 
 import { db } from "@/db";
 import { assets, type AssetSource } from "@/db/schema";
 import { CAPTURES_DIR, INBOX_DIR, THUMBS_DIR } from "@/lib/storage/paths";
-import { mediaRoot, mediaRootMessage, mediaRootStatus, resolveMediaFile, splitRelative } from "@/lib/storage/root";
+import {
+  mediaRoot,
+  mediaRootMessage,
+  mediaRootStatus,
+  resolveMediaFile,
+  splitRelative,
+  toRelative,
+} from "@/lib/storage/root";
 
 import { entryCandidates, parseManifest } from "./manifest";
 import { assetOriginal, ORIGINALS_DIR } from "./originals";
 import { registerFile, type RegisterMeta, type RegisterResult } from "./register";
+import {
+  isInternalMediaPath,
+  isPrivateMediaPath,
+  markSharedMediaFile,
+  privateMediaHashes,
+} from "./privacy";
 
 /**
  * `npm run media:scan` and the library's "Scan" button (PLAN.md §1.45,
@@ -40,7 +53,7 @@ const MANIFEST = "manifest.json";
 const PARTIAL = /\.(part|crdownload|download|tmp|partial)$|^~\$/i;
 
 /** Every regular file under the root, relative, forward slashes. Symlinks and dot-names are not followed. */
-async function walk(root: string): Promise<string[]> {
+async function walk(root: string, prefix = ""): Promise<string[]> {
   const out: string[] = [];
   async function visit(dir: string, rel: string): Promise<void> {
     let entries;
@@ -52,6 +65,7 @@ async function walk(root: string): Promise<string[]> {
     for (const entry of entries) {
       if (entry.name.startsWith(".")) continue;
       const childRel = rel ? `${rel}/${entry.name}` : entry.name;
+      if (isPrivateMediaPath(prefix ? `${prefix}/${childRel}` : childRel)) continue;
       if (entry.isDirectory()) {
         if (entry.name === THUMBS_DIR || entry.name === ORIGINALS_DIR) continue;
         await visit(path.join(dir, entry.name), childRel);
@@ -85,6 +99,7 @@ export async function scanMediaRoot(options: ScanOptions = {}): Promise<ScanResu
   const root = mediaRoot();
   const status = await mediaRootStatus(root);
   if (status === "missing") return { status: "missing", message: mediaRootMessage(status) };
+  const privateHashes = await privateMediaHashes(root);
 
   const result = { manifests: 0, created: 0, existing: 0, updated: 0, skipped: 0 };
   const errors: Array<{ path: string; message: string }> = [];
@@ -100,19 +115,38 @@ export async function scanMediaRoot(options: ScanOptions = {}): Promise<ScanResu
     } else errors.push({ path: rel, message: outcome.message });
   };
 
-  const folderSegments = options.folder ? splitRelative(options.folder.replace(/^\/+|\/+$/g, "")) : [];
+  const folderSegments = options.folder
+    ? splitRelative(options.folder.replace(/^\/+|\/+$/g, ""))
+    : [];
   if (options.folder && !folderSegments) {
     return { status: "missing", message: `Not a folder inside MEDIA_ROOT: ${options.folder}` };
   }
   const prefix = folderSegments?.length ? folderSegments.join("/") : "";
+  if (prefix && isPrivateMediaPath(prefix))
+    return {
+      status: "missing",
+      message: "Personal voice folders cannot be scanned into the shared media library.",
+    };
+  if (prefix) {
+    const realRoot = await realpath(root);
+    const actual = await realpath(path.join(root, ...prefix.split("/"))).catch(() => null);
+    const actualRel = actual ? toRelative(realRoot, actual) : null;
+    if (!actualRel || isPrivateMediaPath(actualRel))
+      return {
+        status: "missing",
+        message: "Choose an existing shared-media folder inside MEDIA_ROOT.",
+      };
+  }
   const files = prefix
-    ? (await walk(path.join(root, ...prefix.split("/")))).map((f) => `${prefix}/${f}`)
+    ? (await walk(path.join(root, ...prefix.split("/")), prefix)).map((f) => `${prefix}/${f}`)
     : await walk(root);
 
   // 1. Manifests first, so a file gets its prompt, model and job id on the scan that first sees it.
   for (const rel of files.filter((f) => path.posix.basename(f) === MANIFEST)) {
     handled.add(rel);
-    const manifest = parseManifest(await readFile(path.join(root, ...rel.split("/")), "utf8").catch(() => ""));
+    const manifest = parseManifest(
+      await readFile(path.join(root, ...rel.split("/")), "utf8").catch(() => ""),
+    );
     if (!manifest) {
       errors.push({ path: rel, message: "Not a JSON manifest." });
       continue;
@@ -123,8 +157,13 @@ export async function scanMediaRoot(options: ScanOptions = {}): Promise<ScanResu
       let found: string | null = null;
       for (const candidate of entryCandidates(entry.file, dir)) {
         const segments = splitRelative(candidate);
+        if (isPrivateMediaPath(candidate)) continue;
         if (segments?.some((part) => part.startsWith(".") || PARTIAL.test(part))) continue;
-        if (segments && (!prefix || segments.join("/").startsWith(`${prefix}/`)) && (await resolveMediaFile(segments, root))) {
+        if (
+          segments &&
+          (!prefix || segments.join("/").startsWith(`${prefix}/`)) &&
+          (await resolveMediaFile(segments, root))
+        ) {
           found = segments.join("/");
           break;
         }
@@ -159,21 +198,44 @@ export async function scanMediaRoot(options: ScanOptions = {}): Promise<ScanResu
   // expose replacement bytes under the old approved identity.
   const legacy = await db.select().from(assets).where(isNotNull(assets.localPath));
   for (const row of legacy) {
+    if (privateHashes.has(row.sha256.toLowerCase()) || isPrivateMediaPath(row.localPath!)) continue;
     if (row.localPath!.startsWith(`${ORIGINALS_DIR}/`)) continue;
     if (prefix && !row.localPath!.startsWith(`${prefix}/`)) continue;
     try {
       const original = await assetOriginal(row, root);
-      await db.update(assets).set({
-        localPath: original?.rel ?? null,
-        ...(original ? {} : {
-          status: "rejected" as const,
-          publicUrl: null,
-          publicExpiresAt: null,
-          notes: `${row.notes ?? ""}\nOriginal bytes missing or changed; restore from backup and review again.`.trim(),
-        }),
-        updatedAt: new Date(),
-      }).where(and(eq(assets.id, row.id), eq(assets.localPath, row.localPath!)));
-      if (!original) errors.push({ path: row.localPath!, message: "Original bytes changed or missing; the old asset was detached and requires review." });
+      if (original && !isInternalMediaPath(row.localPath!)) {
+        try {
+          await markSharedMediaFile(row.localPath!, row.sha256, root);
+        } catch {
+          errors.push({
+            path: row.localPath!,
+            message:
+              "Shared provenance is unverified. Restore the ordinary source and scan again, or request an explicit owner review of this asset identity.",
+          });
+        }
+      }
+      await db
+        .update(assets)
+        .set({
+          localPath: original?.rel ?? null,
+          ...(original
+            ? {}
+            : {
+                status: "rejected" as const,
+                publicUrl: null,
+                publicExpiresAt: null,
+                notes:
+                  `${row.notes ?? ""}\nOriginal bytes missing or changed; restore from backup and review again.`.trim(),
+              }),
+          updatedAt: new Date(),
+        })
+        .where(and(eq(assets.id, row.id), eq(assets.localPath, row.localPath!)));
+      if (!original)
+        errors.push({
+          path: row.localPath!,
+          message:
+            "Original bytes changed or missing; the old asset was detached and requires review.",
+        });
     } catch (error) {
       errors.push({ path: row.localPath!, message: (error as Error).message });
     }

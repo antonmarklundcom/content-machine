@@ -1,9 +1,22 @@
-import { desc, eq, getTableColumns, sql } from "drizzle-orm";
+import { asc, desc, eq, getTableColumns, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { sources, videos, type Source } from "@/db/schema";
 
 export async function listSources(): Promise<Source[]> {
   return db.select().from(sources).orderBy(desc(sources.createdAt));
+}
+
+/** New sources run first, followed by the least recently polled, with stable ties. */
+export async function listSourcesForPolling(): Promise<Source[]> {
+  return db
+    .select()
+    .from(sources)
+    .where(eq(sources.active, true))
+    .orderBy(
+      desc(sql`${sources.lastPolledAt} is null`),
+      asc(sources.lastPolledAt),
+      asc(sources.id),
+    );
 }
 
 /** A source row plus how many videos it has produced (PR-20). */

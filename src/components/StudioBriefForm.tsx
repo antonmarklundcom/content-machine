@@ -1,10 +1,11 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useTransition } from "react";
 import type { LessonKind } from "@/db/schema";
 import type { TranslationKey } from "@/lib/i18n";
 import { useTranslator } from "@/lib/i18n/client";
+import { postClientJson } from "@/lib/client-json";
 import { SCRIPT_LANGUAGES, type ScriptLanguage } from "@/lib/scripts/contract";
 import { STUDIO_BUTTON, STUDIO_INPUT, STUDIO_LABEL as LABEL, STUDIO_PRIMARY } from "./StudioStyles";
 
@@ -21,19 +22,6 @@ const KIND_LABEL: Record<LessonKind, TranslationKey> = {
   caption_pattern: "studio.lessonKind.caption_pattern",
 };
 
-async function postJson(
-  url: string,
-  body: unknown,
-): Promise<{ ok: boolean; data: Record<string, unknown> }> {
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-  return { ok: res.ok, data };
-}
-
 /**
  * The new-script brief (PLAN.md §6.S12.1): brand, topic, language, length,
  * competitor videos and lessons → "Suggest titles" → pick one (or type one) →
@@ -47,6 +35,7 @@ export function StudioBriefForm({
   selectedRefs,
   lessons,
   initialTopic = "",
+  canGenerate,
 }: {
   brands: { id: string; name: string; language: ScriptLanguage }[];
   brandId: string;
@@ -54,6 +43,7 @@ export function StudioBriefForm({
   selectedRefs: number[];
   lessons: BriefLesson[];
   initialTopic?: string;
+  canGenerate: boolean;
 }) {
   const t = useTranslator();
   const router = useRouter();
@@ -68,6 +58,8 @@ export function StudioBriefForm({
   const [title, setTitle] = useState("");
   const [busy, setBusy] = useState<"titles" | "script" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [expired, setExpired] = useState(false);
+  const [switching, startSwitch] = useTransition();
 
   // A brand switch reloads the page's lessons (they are per brand); the topic
   // survives, the brand-specific choices do not.
@@ -75,12 +67,16 @@ export function StudioBriefForm({
     setLanguage(brandDefault);
     setLessonIds([]);
     setTitles([]);
+    setTitle("");
+    setError(null);
+    setExpired(false);
   }, [brandId, brandDefault]);
 
   function switchBrand(next: string) {
     const q = new URLSearchParams({ brand: next });
+    if (topic.trim()) q.set("topic", topic);
     for (const r of refs) q.append("ref", String(r));
-    router.replace(`/studio/new?${q}`);
+    startSwitch(() => router.replace(`/studio/new?${q}`));
   }
 
   const toggle = (list: number[], id: number) =>
@@ -88,18 +84,30 @@ export function StudioBriefForm({
 
   async function suggestTitles() {
     setError(null);
+    setExpired(false);
     setBusy("titles");
     try {
-      const { ok, data } = await postJson("/api/scripts/titles", {
+      const {
+        ok,
+        expired: sessionExpired,
+        data,
+      } = await postClientJson("/api/scripts/titles", {
         brandId,
         topic,
         language,
         ...(lessonIds.length ? { lessonIds } : {}),
       });
-      if (!ok) return setError(String(data.error ?? t("studio.error.generic")));
+      if (!ok) {
+        setExpired(sessionExpired);
+        return setError(
+          sessionExpired
+            ? t("capture.error.expired")
+            : String(data.error ?? t("studio.error.generic")),
+        );
+      }
       const list = (data.titles as TitleSuggestion[]) ?? [];
       setTitles(list);
-      if (!title && list[0]) setTitle(list[0].title);
+      if (list[0]) setTitle((current) => current || list[0].title);
     } catch {
       setError(t("studio.error.generic"));
     } finally {
@@ -109,9 +117,14 @@ export function StudioBriefForm({
 
   async function writeScript() {
     setError(null);
+    setExpired(false);
     setBusy("script");
     try {
-      const { ok, data } = await postJson("/api/scripts", {
+      const {
+        ok,
+        expired: sessionExpired,
+        data,
+      } = await postClientJson("/api/scripts", {
         brandId,
         topic,
         title,
@@ -121,7 +134,14 @@ export function StudioBriefForm({
         lessonIds,
       });
       const script = data.script as { id: number } | undefined;
-      if (!ok || !script) return setError(String(data.error ?? t("studio.error.generic")));
+      if (!ok || !script) {
+        setExpired(sessionExpired);
+        return setError(
+          sessionExpired
+            ? t("capture.error.expired")
+            : String(data.error ?? t("studio.error.generic")),
+        );
+      }
       router.push(`/studio/${script.id}`);
     } catch {
       setError(t("studio.error.generic"));
@@ -138,6 +158,7 @@ export function StudioBriefForm({
           <select
             className={STUDIO_INPUT}
             value={brandId}
+            disabled={busy !== null || switching}
             onChange={(e) => switchBrand(e.target.value)}
           >
             {brands.map((b) => (
@@ -255,7 +276,7 @@ export function StudioBriefForm({
         <button
           type="button"
           className={STUDIO_BUTTON}
-          disabled={!topic.trim() || busy !== null}
+          disabled={!canGenerate || !topic.trim() || busy !== null || switching}
           onClick={suggestTitles}
         >
           {busy === "titles" ? t("studio.brief.suggesting") : t("studio.brief.suggest")}
@@ -297,12 +318,22 @@ export function StudioBriefForm({
           {error}
         </p>
       )}
+      {expired && (
+        <a
+          href="/youtube/login"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-sm text-[var(--color-accent)] underline"
+        >
+          {t("capture.signInRetry")}
+        </a>
+      )}
 
       <div className="flex flex-wrap items-center gap-3">
         <button
           type="button"
           className={STUDIO_PRIMARY}
-          disabled={!topic.trim() || !title.trim() || busy !== null}
+          disabled={!canGenerate || !topic.trim() || !title.trim() || busy !== null || switching}
           onClick={writeScript}
         >
           {busy === "script" ? t("studio.brief.writing") : t("studio.brief.write")}

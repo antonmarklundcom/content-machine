@@ -46,6 +46,7 @@ import {
 import { isPostStatus } from "@/lib/posts/status";
 import { GuaraniGenerationRefusedError } from "@/lib/glossary/prompt";
 import { formatUsd, SpendCapExceededError } from "@/lib/spend";
+import { isPrivateAsset } from "@/lib/media/privacy";
 
 export type PostActionResult<T = object> =
   ({ ok: true } & T) | { ok: false; error: string; errors?: string[] };
@@ -375,6 +376,11 @@ export async function attachAssetAction(
       async (tx, post) => {
         const [asset] = await tx.select().from(assets).where(eq(assets.id, assetId)).limit(1);
         if (!asset) throw new PostEngineError(`No asset ${assetId}.`, 404);
+        if (await isPrivateAsset(asset).catch(() => true))
+          throw new PostEngineError(
+            "Private or unreviewed media cannot be attached. Reconnect storage, rescan its ordinary source, or ask the owner to review the exact identity.",
+            409,
+          );
         if (asset.brandId && asset.brandId !== post.brandId)
           throw new PostEngineError("That file belongs to another brand.");
         if (asset.accountId !== null && asset.accountId !== post.accountId)

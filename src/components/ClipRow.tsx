@@ -8,6 +8,7 @@ import { ConfirmSubmitButton } from "./ConfirmSubmitButton";
 import { PromoteButton, type PromoteBrand, type PromoteSourceOption } from "./PromoteButton";
 import { RetryClipButton } from "./RetryClipButton";
 import { STATUS_KEY, PLATFORM_KEY, PURPOSE_KEY } from "./ClipFilters";
+import { CLIP_NO_CAPTIONS_MESSAGE } from "@/lib/clips/work";
 
 const STATUS_CLASS: Record<InboxClip["status"], string> = {
   unprocessed: "bg-[var(--color-surface)] text-[var(--color-ink-muted)]",
@@ -155,9 +156,7 @@ export function ClipRow({
           </form>
         </details>
 
-        {clip.status === "failed" && clip.error && (
-          <p className="text-xs text-[var(--color-danger)]">{clip.error}</p>
-        )}
+        {clip.error && <p className="text-xs text-[var(--color-danger)]">{clip.error}</p>}
 
         <div className="mt-1 flex flex-wrap items-center gap-2">
           <Link href={`/clips/${clip.id}`} className={ACTION_BUTTON}>
@@ -176,9 +175,15 @@ export function ClipRow({
               clipId={clip.id}
             />
           )}
+          {canManage && clip.error === CLIP_NO_CAPTIONS_MESSAGE && (
+            <Link href="/youtube/ingest" className={ACTION_BUTTON}>
+              {t("clipFetch.manualTranscript")}
+            </Link>
+          )}
           {canManage &&
             clip.platform === "youtube" &&
             clip.purpose !== "learn" &&
+            clip.error !== CLIP_NO_CAPTIONS_MESSAGE &&
             (clip.status === "failed" || clip.status === "unprocessed") && (
               <RetryClipButton
                 clipId={clip.id}

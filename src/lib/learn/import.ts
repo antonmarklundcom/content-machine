@@ -8,6 +8,7 @@ import { normalizeTags } from "@/lib/clips/save";
 import { canonicalClipUrl, CLIP_URL_LIMIT, platformForUrl } from "@/lib/clips/url";
 
 import { toLearnCategory } from "./categories";
+import { parseLegacyImportDate as date } from "./legacy-pg";
 
 /**
  * One-time import of aiinsights' `items` table into learn clips
@@ -30,12 +31,6 @@ export type ImportedClip = typeof clips.$inferInsert & { url: string };
 export const IMPORT_TAG = "aiinsights";
 
 const text = (v: unknown): string | null => (typeof v === "string" && v.trim() ? v.trim() : null);
-
-function date(v: unknown): Date | null {
-  if (v === null || v === undefined || v === "") return null;
-  const d = v instanceof Date ? v : new Date(String(v));
-  return Number.isNaN(d.getTime()) ? null : d;
-}
 
 function stringList(v: unknown): string[] {
   let list = v;

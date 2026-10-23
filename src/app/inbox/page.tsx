@@ -23,6 +23,7 @@ import { ClipRow } from "@/components/ClipRow";
 import { QuickAddClipForm } from "@/components/QuickAddClipForm";
 import { Pagination } from "@/components/Pagination";
 import type { PromoteSourceOption } from "@/components/PromoteButton";
+import { reapStuckClips } from "@/lib/clips/recovery";
 
 export async function generateMetadata(): Promise<Metadata> {
   return { title: translator(await getLocale())("inbox.title") };
@@ -35,6 +36,7 @@ type SearchParams = {
   purpose?: string;
   tag?: string;
   page?: string;
+  notice?: string;
 };
 
 function isClipStatus(value: string | undefined): value is ClipStatus {
@@ -71,6 +73,7 @@ export default async function InboxPage({ searchParams }: { searchParams: Promis
   const locale = await getLocale();
   const t = translator(locale);
   const canManage = isOwner(user);
+  if (canManage) await reapStuckClips();
 
   const status = isClipStatus(params.status) ? params.status : undefined;
   const platform = isClipPlatform(params.platform) ? params.platform : undefined;
@@ -93,6 +96,11 @@ export default async function InboxPage({ searchParams }: { searchParams: Promis
   return (
     <main className="mx-auto max-w-3xl px-6 py-10">
       <div className="mb-6 flex flex-col gap-4">
+        {params.notice === "clip-busy" && (
+          <p role="status" className="surface-card p-4 text-sm text-[var(--color-ink)]">
+            {t("clipFetch.busy")}
+          </p>
+        )}
         <div>
           <p className="text-xs font-medium tracking-widest text-[var(--color-accent)] uppercase">
             {t("inbox.eyebrow")}

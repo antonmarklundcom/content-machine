@@ -1,12 +1,14 @@
 import "server-only";
 import { createHash } from "node:crypto";
-import { and, eq, inArray, isNotNull, lte } from "drizzle-orm";
+import { and, eq, isNotNull, lte } from "drizzle-orm";
 
 import { db } from "@/db";
 import { assets, postAssets, posts, type PostStatus } from "@/db/schema";
 import type { StorageDriver } from "@/lib/storage/driver";
 import { hostingerConfig, hostingerDriver, hostingerKeyFromUrl, HOSTINGER_NOT_CONFIGURED } from "@/lib/storage/hostinger";
 import { localDriver } from "@/lib/storage/local";
+import { isPrivateAsset } from "@/lib/media/privacy";
+import { mediaRootMessage, mediaRootStatus } from "@/lib/storage/root";
 
 /**
  * The public tier's life cycle (PLAN.md §1.41): `publishCopy` puts an asset on
@@ -41,11 +43,20 @@ export async function publishCopy(
   assetId: number,
   options: { now?: Date; drivers?: Drivers; writer?: Pick<typeof db, "select" | "update"> } = {},
 ): Promise<PublishResult> {
+  // Sharing the asset row lock with prune prevents renewal/replacement races.
+  if (!options.writer) return db.transaction((tx) => publishCopy(assetId, { ...options, writer: tx }));
   const now = options.now ?? new Date();
   const writer = options.writer ?? db;
   const expiresAt = new Date(now.getTime() + retentionDays() * DAY_MS);
-  const [asset] = await writer.select().from(assets).where(eq(assets.id, assetId)).limit(1);
+  const [asset] = await writer.select().from(assets).where(eq(assets.id, assetId)).limit(1).for("update");
   if (!asset) return { status: "not_found", message: `No asset ${assetId}.` };
+  const mediaStatus = await mediaRootStatus();
+  if (mediaStatus !== "ok") return { status: "missing", message: mediaRootMessage(mediaStatus) };
+  try {
+    if (await isPrivateAsset(asset)) return { status: "error", message: "Private or unreviewed media cannot be published. Rescan surviving ordinary sources or review its identity first." };
+  } catch {
+    return { status: "error", message: "Media privacy classification is unavailable. Restore private media access before publishing." };
+  }
 
   if (asset.publicUrl && asset.publicExpiresAt && asset.publicExpiresAt > now) {
     await writer.update(assets).set({ publicExpiresAt: expiresAt, updatedAt: now }).where(eq(assets.id, assetId));
@@ -103,47 +114,32 @@ export async function prunePublic(options: { now?: Date; driver?: StorageDriver 
     .where(and(isNotNull(assets.publicUrl), lte(assets.publicExpiresAt, now)));
   if (!due.length) return { status: "ok", removed: 0, kept: 0, errors: [] };
 
-  const busy = new Set(
-    (
-      await db
-        .selectDistinct({ assetId: postAssets.assetId })
-        .from(postAssets)
-        .innerJoin(posts, eq(posts.id, postAssets.postId))
-        .where(
-          and(
-            inArray(
-              postAssets.assetId,
-              due.map((d) => d.id),
-            ),
-            inArray(posts.status, STILL_PUBLISHING),
-          ),
-        )
-    ).map((r) => r.assetId),
-  );
-
   let removed = 0;
   let kept = 0;
   const errors: Array<{ assetId: number; message: string }> = [];
   for (const row of due) {
-    if (busy.has(row.id)) {
-      kept++;
-      continue;
+    try {
+      const result = await db.transaction(async (tx) => {
+        // Match editorial/publisher lock order: linked posts before their assets.
+        // Scheduling cannot change a linked post while its old public copy is removed.
+        const linked = await tx.select({ status: posts.status }).from(posts)
+          .innerJoin(postAssets, eq(posts.id, postAssets.postId))
+          .where(eq(postAssets.assetId, row.id)).orderBy(posts.id).for("update");
+        if (linked.some((p) => STILL_PUBLISHING.includes(p.status))) return "kept";
+        const [current] = await tx.select().from(assets).where(eq(assets.id, row.id)).for("update");
+        if (!current?.publicUrl || !current.publicExpiresAt || current.publicExpiresAt > now) return "kept";
+        const key = config ? hostingerKeyFromUrl(current.publicUrl, config) : urlKey(current.publicUrl);
+        if (!key) throw new Error("The selected public URL does not belong to this storage endpoint.");
+        const outcome = await driver.remove(key);
+        if (!outcome.ok) throw new Error(outcome.message);
+        await tx.update(assets).set({ publicUrl: null, publicExpiresAt: null, updatedAt: now })
+          .where(and(eq(assets.id, current.id), eq(assets.publicUrl, current.publicUrl), eq(assets.publicExpiresAt, current.publicExpiresAt)));
+        return "removed";
+      });
+      if (result === "removed") removed++; else kept++;
+    } catch (error) {
+      errors.push({ assetId: row.id, message: error instanceof Error ? error.message : "Could not remove public media." });
     }
-    const key = config ? hostingerKeyFromUrl(row.publicUrl!, config) : urlKey(row.publicUrl!);
-    if (!key) {
-      errors.push({ assetId: row.id, message: `Not one of this endpoint's URLs: ${row.publicUrl}` });
-      continue;
-    }
-    const outcome = await driver.remove(key);
-    if (!outcome.ok) {
-      errors.push({ assetId: row.id, message: outcome.message });
-      continue;
-    }
-    await db
-      .update(assets)
-      .set({ publicUrl: null, publicExpiresAt: null, updatedAt: now })
-      .where(eq(assets.id, row.id));
-    removed++;
   }
   return { status: "ok", removed, kept, errors };
 }

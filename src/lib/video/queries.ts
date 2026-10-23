@@ -1,9 +1,9 @@
 import { updateReturning } from "@/db/mutations";
 import "server-only";
-import { and, desc, eq, inArray, lt, or, isNull } from "drizzle-orm";
+import { and, desc, eq, inArray, lt, or, isNull, sql } from "drizzle-orm";
 
 import { db } from "@/db";
-import { videoRenders, type VideoRender } from "@/db/schema";
+import { videoRenders, leases, type VideoRender } from "@/db/schema";
 
 import type { RenderPlan } from "./render";
 
@@ -57,6 +57,7 @@ export async function failStaleRenders(now = new Date()): Promise<number> {
     },
     and(
       inArray(videoRenders.status, ["queued", "rendering"]),
+      sql`not exists (select 1 from ${leases} where ${leases.name} = concat('render:', ${videoRenders.id}) and ${leases.expiresAt} > current_timestamp(3))`,
       or(
         lt(videoRenders.startedAt, cutoff),
         and(isNull(videoRenders.startedAt), lt(videoRenders.createdAt, cutoff)),

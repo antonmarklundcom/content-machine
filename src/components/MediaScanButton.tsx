@@ -45,6 +45,19 @@ export function MediaScanButton({ disabled }: { disabled?: boolean }) {
         ) : (
           <ResultMessage tone="error">{result.error}</ResultMessage>
         ))}
+      {result?.ok && result.errorDetails.length > 0 && (
+        <details className="max-w-xl text-left text-sm text-[var(--color-ink-muted)]">
+          <summary className="cursor-pointer">{t("media.scan.details")}</summary>
+          <ul className="mt-2 list-disc space-y-2 pl-5">
+            {result.errorDetails.map((error, index) => (
+              <li key={`${error.path}-${index}`} className="break-words">
+                <span className="font-medium">{error.path}</span>: {error.message}
+              </li>
+            ))}
+          </ul>
+          {result.errorsTruncated && <p className="mt-2">{t("media.scan.truncated")}</p>}
+        </details>
+      )}
     </div>
   );
 }

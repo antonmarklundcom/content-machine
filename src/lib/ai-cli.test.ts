@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import path from "node:path";
-import { writeFile, mkdtemp, chmod } from "node:fs/promises";
+import { writeFile, mkdtemp, chmod, rm, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import {
   aiProvider,
@@ -102,3 +102,137 @@ test("runCliJson explains a missing binary", async () => {
     else process.env.CLAUDE_CLI_BIN = prev;
   }
 });
+
+test("hosted CLI refuses before executing any binary", async () => {
+  const old = process.env.APP_MODE;
+  process.env.APP_MODE = "online";
+  try {
+    for (const provider of ["claude-cli", "codex-cli"] as const)
+      await assert.rejects(
+        runCliJson({
+          provider,
+          system: "synthetic",
+          prompt: "synthetic",
+          schema: {},
+          webSearch: false,
+        }),
+        /runs on the PC/,
+      );
+  } finally {
+    if (old === undefined) delete process.env.APP_MODE;
+    else process.env.APP_MODE = old;
+  }
+});
+
+test("CLI output limit terminates a synthetic noisy process", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "cm-cli-limit-"));
+  const bin = path.join(dir, "noisy.mjs");
+  await writeFile(bin, 'process.stdout.write("x".repeat(8192));setInterval(()=>{},1000);');
+  const old = process.env.CLAUDE_CLI_BIN;
+  process.env.CLAUDE_CLI_BIN = bin;
+  try {
+    await assert.rejects(
+      runCliJson({
+        provider: "claude-cli",
+        system: "s",
+        prompt: "p",
+        schema: {},
+        webSearch: false,
+        maxOutputBytes: 1024,
+        timeoutMs: 5000,
+      }),
+      /output limit/,
+    );
+  } finally {
+    if (old === undefined) delete process.env.CLAUDE_CLI_BIN;
+    else process.env.CLAUDE_CLI_BIN = old;
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("CLI timeout terminates its synthetic wrapper and grandchild", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "cm-cli-tree-"));
+  const pidFile = path.join(dir, "child.pid");
+  const bin = path.join(dir, "wrapper.mjs");
+  await writeFile(
+    bin,
+    `import {spawn} from 'node:child_process';import {writeFileSync} from 'node:fs';const c=spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:'ignore',windowsHide:true});writeFileSync(${JSON.stringify(pidFile)},String(c.pid));setInterval(()=>{},1000);`,
+  );
+  const old = process.env.CLAUDE_CLI_BIN;
+  process.env.CLAUDE_CLI_BIN = bin;
+  try {
+    await assert.rejects(
+      runCliJson({
+        provider: "claude-cli",
+        system: "s",
+        prompt: "p",
+        schema: {},
+        webSearch: false,
+        timeoutMs: 1500,
+      }),
+      /owned process tree/,
+    );
+    const pid = Number(await readFile(pidFile, "utf8"));
+    let alive = true;
+    for (let i = 0; i < 20 && alive; i++) {
+      try {
+        process.kill(pid, 0);
+        await new Promise((r) => setTimeout(r, 50));
+      } catch {
+        alive = false;
+      }
+    }
+    assert.equal(alive, false, "owned grandchild must not outlive the timeout");
+  } finally {
+    if (old === undefined) delete process.env.CLAUDE_CLI_BIN;
+    else process.env.CLAUDE_CLI_BIN = old;
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test(
+  "POSIX wrapper exit stops a SIGTERM-resistant inherited-pipe descendant",
+  { skip: process.platform === "win32" },
+  async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "cm-cli-exit-"));
+    const pidFile = path.join(dir, "child.pid");
+    const bin = path.join(dir, "wrapper.mjs");
+    await writeFile(
+      bin,
+      `import {spawn} from 'node:child_process';import {writeFileSync} from 'node:fs';const c=spawn(process.execPath,['-e','process.on("SIGTERM",()=>{});setInterval(()=>{},1000)'],{stdio:['ignore',process.stdout,process.stderr]});writeFileSync(${JSON.stringify(pidFile)},String(c.pid));process.stdout.write('{"ok":true}');setTimeout(()=>process.exit(0),300);`,
+    );
+    const old = process.env.CLAUDE_CLI_BIN;
+    process.env.CLAUDE_CLI_BIN = bin;
+    let pid = 0;
+    try {
+      const out = await runCliJson({
+        provider: "claude-cli",
+        system: "s",
+        prompt: "p",
+        schema: {},
+        webSearch: false,
+        timeoutMs: 5000,
+      });
+      assert.deepEqual(JSON.parse(out), { ok: true });
+      pid = Number(await readFile(pidFile, "utf8"));
+      // A reparented zombie may remain visible to kill(0) briefly on Linux;
+      // /proc status distinguishes it from a running orphan.
+      const status = await readFile(`/proc/${pid}/status`, "utf8").catch(() => "");
+      assert.ok(
+        !status || /^State:\s+Z/m.test(status),
+        "descendant must be gone or a terminated zombie",
+      );
+    } finally {
+      if (old === undefined) delete process.env.CLAUDE_CLI_BIN;
+      else process.env.CLAUDE_CLI_BIN = old;
+      if (pid) {
+        try {
+          process.kill(pid, "SIGKILL");
+        } catch {
+          /* already gone */
+        }
+      }
+      await rm(dir, { recursive: true, force: true });
+    }
+  },
+);

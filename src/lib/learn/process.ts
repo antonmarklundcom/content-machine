@@ -5,10 +5,17 @@ import { db } from "@/db";
 import { clips, videos, type Clip } from "@/db/schema";
 import { normalizeTags } from "@/lib/clips/save";
 import { configuredLanguages, configuredStrategies } from "@/lib/ingest/captions";
-import { withLease } from "@/lib/lease";
+import {
+  assertLeaseCurrent,
+  LeaseLostError,
+  withLeaseCommit,
+  withRenewableLease,
+  type Lease,
+} from "@/lib/lease";
+import { clipWorkLease, CLIP_WORK_LEASE_TTL_MS } from "@/lib/clips/work";
 import { isAutomationAllowed } from "@/lib/automation/store";
 import { SpendCapExceededError } from "@/lib/spend";
-import { fetchListing } from "@/lib/studio/listing";
+import { fetchListing } from "@/lib/studio/listing-fetch";
 import { fetchCaptions } from "@/lib/youtube/captions";
 import { YouTubeDataClient } from "@/lib/youtube/data-api";
 import { parseVideoId } from "@/lib/youtube/url";
@@ -36,8 +43,8 @@ import { describeScreenshot } from "./vision";
  * learn:process` can overlap safely.
  */
 
-export const LEARN_CLIP_LEASE_TTL_MS = 10 * 60 * 1000;
-export const learnClipLease = (id: number) => `learn:clip:${id}`;
+export const LEARN_CLIP_LEASE_TTL_MS = CLIP_WORK_LEASE_TTL_MS;
+export const learnClipLease = clipWorkLease;
 
 /** The pseudo-URL host the capture Worker gives a file sent with no link. */
 const NO_LINK_HOST = "telegram.invalid";
@@ -110,9 +117,16 @@ function isNoLinkUrl(url: string): boolean {
   }
 }
 
-async function fail(clipId: number, error: string, spendCap = false): Promise<LearnOutcome> {
+async function fail(
+  lease: Lease,
+  clipId: number,
+  error: string,
+  spendCap = false,
+): Promise<LearnOutcome> {
   const message = error.slice(0, 1024);
-  await db.update(clips).set({ error: message }).where(eq(clips.id, clipId));
+  await withLeaseCommit(lease, (tx) =>
+    tx.update(clips).set({ error: message }).where(eq(clips.id, clipId)),
+  );
   return { status: "failed", clipId, error: message, ...(spendCap ? { spendCap } : {}) };
 }
 
@@ -183,17 +197,20 @@ export async function gatherLearnInput(
   };
 }
 
-async function processHeld(clip: Clip, deps: LearnDeps): Promise<LearnOutcome> {
+async function processHeld(clip: Clip, deps: LearnDeps, lease: Lease): Promise<LearnOutcome> {
   let gathered: Awaited<ReturnType<typeof gatherLearnInput>>;
   try {
+    await assertLeaseCurrent(lease);
     gathered = await gatherLearnInput(clip, deps);
   } catch (err) {
-    if (err instanceof SpendCapExceededError) return fail(clip.id, err.message, true);
-    return fail(clip.id, `Learn summary failed: ${(err as Error).message}`);
+    if (err instanceof LeaseLostError) throw err;
+    if (err instanceof SpendCapExceededError) return fail(lease, clip.id, err.message, true);
+    return fail(lease, clip.id, `Learn summary failed: ${(err as Error).message}`);
   }
   const { input, screenshotError } = gathered;
   if (!hasLearnContent(input)) {
     return fail(
+      lease,
       clip.id,
       screenshotError
         ? `Could not read the screenshot (${screenshotError}). Add a note about what it shows and run it again.`
@@ -202,25 +219,28 @@ async function processHeld(clip: Clip, deps: LearnDeps): Promise<LearnOutcome> {
   }
 
   try {
+    await assertLeaseCurrent(lease);
     const summary = await summarizeLearn(input, deps.run);
-    await db
-      .update(clips)
-      .set({
-        title: clip.title ?? input.title?.slice(0, 512) ?? summary.title,
-        summary: learnSummaryText(summary),
-        howToStart: summary.howToStart,
-        learnDetails: {
-          takeaways: summary.takeaways,
-          resources: summary.resources,
-          limitations: summary.limitations,
-        },
-        learnCategory: summary.category,
-        tags: normalizeTags([...clip.tags, ...summary.tags]),
-        transcript: clip.transcript ?? input.transcript ?? null,
-        postText: clip.postText ?? input.caption ?? null,
-        error: null,
-      })
-      .where(eq(clips.id, clip.id));
+    await withLeaseCommit(lease, (tx) =>
+      tx
+        .update(clips)
+        .set({
+          title: clip.title ?? input.title?.slice(0, 512) ?? summary.title,
+          summary: learnSummaryText(summary),
+          howToStart: summary.howToStart,
+          learnDetails: {
+            takeaways: summary.takeaways,
+            resources: summary.resources,
+            limitations: summary.limitations,
+          },
+          learnCategory: summary.category,
+          tags: normalizeTags([...clip.tags, ...summary.tags]),
+          transcript: clip.transcript ?? input.transcript ?? null,
+          postText: clip.postText ?? input.caption ?? null,
+          error: null,
+        })
+        .where(eq(clips.id, clip.id)),
+    );
     return {
       status: "done",
       clipId: clip.id,
@@ -228,8 +248,9 @@ async function processHeld(clip: Clip, deps: LearnDeps): Promise<LearnOutcome> {
       costUsd: gathered.costUsd + summary.costUsd,
     };
   } catch (err) {
-    if (err instanceof SpendCapExceededError) return fail(clip.id, err.message, true);
-    return fail(clip.id, `Learn summary failed: ${(err as Error).message}`);
+    if (err instanceof LeaseLostError) throw err;
+    if (err instanceof SpendCapExceededError) return fail(lease, clip.id, err.message, true);
+    return fail(lease, clip.id, `Learn summary failed: ${(err as Error).message}`);
   }
 }
 
@@ -243,18 +264,22 @@ export async function processLearnClip(
   options: { force?: boolean; deps?: Partial<LearnDeps> } = {},
 ): Promise<LearnOutcome> {
   const deps = { ...defaultLearnDeps, ...options.deps };
-  const held = await withLease(learnClipLease(id), LEARN_CLIP_LEASE_TTL_MS, async () => {
-    // Read inside the lease, so a run that just finished is seen as finished.
-    const [clip] = await db.select().from(clips).where(eq(clips.id, id)).limit(1);
-    if (!clip) throw new LearnClipNotFoundError(id);
-    if (clip.purpose !== "learn") {
-      return { status: "skipped", clipId: id, reason: "not a learn clip" } as const;
-    }
-    if (clip.learnCategory && !options.force) {
-      return { status: "skipped", clipId: id, reason: "already summarised" } as const;
-    }
-    return processHeld(clip, deps);
-  });
+  const held = await withRenewableLease(
+    learnClipLease(id),
+    LEARN_CLIP_LEASE_TTL_MS,
+    async (lease) => {
+      // Read inside the lease, so a run that just finished is seen as finished.
+      const [clip] = await db.select().from(clips).where(eq(clips.id, id)).limit(1);
+      if (!clip) throw new LearnClipNotFoundError(id);
+      if (clip.purpose !== "learn") {
+        return { status: "skipped", clipId: id, reason: "not a learn clip" } as const;
+      }
+      if (clip.learnCategory && !options.force) {
+        return { status: "skipped", clipId: id, reason: "already summarised" } as const;
+      }
+      return processHeld(clip, deps, lease);
+    },
+  );
   return held.acquired
     ? held.value
     : { status: "skipped", clipId: id, reason: "another run is processing it" };

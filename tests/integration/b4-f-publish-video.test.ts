@@ -1,5 +1,6 @@
 import { insertReturning } from "@/db/mutations";
 import assert from "node:assert/strict";
+import { approveSharedMediaIdentity } from "@/lib/media/privacy";
 import { createHash } from "node:crypto";
 import { approvedPublishFixture } from "./publish-approval";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -288,6 +289,7 @@ async function asset(
     source: "upload",
     status: "approved",
   });
+  await approveSharedMediaIdentity(row.sha256, media);
   return row;
 }
 
