@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { assertOnPc } from "@/lib/pc-only";
 import { killChildTree, spawnCli } from "@/lib/higgsfield/process";
+import { CONTAINMENT_FAILED_EXIT, CONTAINMENT_FAILED_MARKER } from "@/lib/higgsfield/win-job";
 
 /**
  * Subscription mode (§1.38): instead of paying per token through the Gemini
@@ -101,6 +102,16 @@ export function unwrapClaudeEnvelope(stdout: string): string {
   return stdout;
 }
 
+/** The error shown when the CLI ended with a non-zero code. */
+export function exitError(bin: string, code: number | null, stderr: string, stdout: string): Error {
+  if (code === CONTAINMENT_FAILED_EXIT && stderr.includes(CONTAINMENT_FAILED_MARKER)) {
+    return new Error(
+      `${bin} was not allowed to run: Windows could not place it in an owned process job, so it could not be cancelled reliably. Try again; if this repeats, start Content Machine outside any tool that restricts child process jobs.`,
+    );
+  }
+  return new Error(`${bin} exited with code ${code}: ${(stderr || stdout).trim().slice(0, 400)}`);
+}
+
 function run(
   cmd: CliCommand,
   input: string,
@@ -154,13 +165,8 @@ function run(
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      if (code !== 0) {
-        reject(
-          new Error(
-            `${cmd.bin} exited with code ${code}: ${(stderr || stdout).trim().slice(0, 400)}`,
-          ),
-        );
-      } else resolve(stdout);
+      if (code !== 0) reject(exitError(cmd.bin, code, stderr, stdout));
+      else resolve(stdout);
     });
     child.stdin?.on("error", (error) => stop(error));
     child.stdin?.end(input);

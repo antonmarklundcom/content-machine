@@ -1,4 +1,5 @@
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
+import { launcherArgs, msvcrtQuote, powershellPath } from "./win-job";
 
 /**
  * Starting, probing and killing the `claude` CLI (build 4 §1.14). Mirrors the
@@ -29,21 +30,49 @@ export function invocation(bin: string, args: string[]): Invocation {
   return { command: bin, args, shell: false };
 }
 
-/** Spawn with piped stdio in `cwd`. On POSIX the child leads its own group, so a kill reaches its MCP servers too. */
+/**
+ * The exact Windows command line Node would run for `inv`: cmd.exe's
+ * `/d /s /c "..."` form for a shell invocation, MSVCRT quoting otherwise.
+ */
+export function windowsCommandLine(
+  inv: Invocation,
+  env: Record<string, string | undefined> = process.env,
+): string {
+  if (inv.shell) {
+    const comspec = env.ComSpec || "cmd.exe";
+    return `${msvcrtQuote(comspec)} /d /s /c "${[inv.command, ...inv.args].join(" ")}"`;
+  }
+  return [inv.command, ...inv.args].map(msvcrtQuote).join(" ");
+}
+
+/**
+ * Spawn with piped stdio in `cwd`. On POSIX the child leads its own group, so a
+ * kill reaches its MCP servers too. On Windows the command runs inside a Job
+ * Object owned by a small launcher (see ./win-job): when the launcher ends, for
+ * any reason, Windows stops every process still in that job.
+ */
 export function spawnCli(
   bin: string,
   args: string[],
   opts: { cwd: string; env?: NodeJS.ProcessEnv },
 ): ChildProcess {
   const inv = invocation(bin, args);
-  const child = spawn(inv.command, inv.args, {
-    cwd: opts.cwd,
-    env: opts.env ?? process.env,
-    shell: inv.shell,
-    detached: !isWindows,
-    windowsHide: true,
-    stdio: ["pipe", "pipe", "pipe"],
-  });
+  const env = opts.env ?? process.env;
+  const child = isWindows
+    ? spawn(powershellPath(env), launcherArgs(windowsCommandLine(inv, env)), {
+        cwd: opts.cwd,
+        env,
+        windowsHide: true,
+        stdio: ["pipe", "pipe", "pipe"],
+      })
+    : spawn(inv.command, inv.args, {
+        cwd: opts.cwd,
+        env,
+        shell: inv.shell,
+        detached: true,
+        windowsHide: true,
+        stdio: ["pipe", "pipe", "pipe"],
+      });
   ownedGroups.add(child);
   // POSIX retains the owned process-group identity after its leader exits.
   // Close inherited-pipe children too, instead of waiting on a dead wrapper.
@@ -94,7 +123,10 @@ export function killChildTree(child: ChildProcess): void {
       /* owned group already gone */
     }
   } else if (child.exitCode === null && child.signalCode === null) {
-    killTree(child.pid);
+    // Ends the launcher through Node's own process handle (no PID lookup);
+    // Windows then closes the job handle and stops every process in the job.
+    // If the launcher already exited, the job and its members are already gone.
+    child.kill("SIGKILL");
   }
 }
 

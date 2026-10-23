@@ -8,6 +8,7 @@ import {
   buildCliPrompt,
   claudeCommand,
   codexCommand,
+  exitError,
   extractJson,
   runCliJson,
   unwrapClaudeEnvelope,
@@ -124,6 +125,16 @@ test("hosted CLI refuses before executing any binary", async () => {
   }
 });
 
+test("containment failure is reported as not run, other exits keep their output", () => {
+  assert.match(
+    exitError("claude", 0x4a0b, "CM_CONTAINMENT_FAILED:AssignProcessToJobObject (5)", "").message,
+    /not allowed to run.*owned process job/,
+  );
+  // The code alone (without the launcher's marker) is just an ordinary exit.
+  assert.match(exitError("claude", 0x4a0b, "boom", "").message, /exited with code 18955: boom/);
+  assert.match(exitError("codex", 2, "", "out").message, /exited with code 2: out/);
+});
+
 test("CLI output limit terminates a synthetic noisy process", async () => {
   const dir = await mkdtemp(path.join(tmpdir(), "cm-cli-limit-"));
   const bin = path.join(dir, "noisy.mjs");
@@ -168,7 +179,8 @@ test("CLI timeout terminates its synthetic wrapper and grandchild", async () => 
         prompt: "p",
         schema: {},
         webSearch: false,
-        timeoutMs: 1500,
+        // The Windows job launcher needs a moment before the wrapper starts.
+        timeoutMs: process.platform === "win32" ? 6000 : 1500,
       }),
       /owned process tree/,
     );
