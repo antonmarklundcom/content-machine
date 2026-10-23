@@ -50,6 +50,7 @@ import { checkTransition } from "./status";
 import { publicationBlock } from "@/lib/publish/safety";
 import { sendSnapshot, SendRefusal, verifyOwner } from "@/lib/publish/preflight";
 import { whatWorked } from "./what-worked";
+import { MediaProvenanceError } from "@/lib/media/privacy";
 
 /**
  * The post engine (PLAN.md §1.46–§1.47, §5.O11.2): drafting a post for one
@@ -558,6 +559,13 @@ export async function exportBrief(postId: number): Promise<{ markdown: string; j
 export async function exportPack(postId: number): Promise<{ markdown: string; json: PostPack }> {
   const post = await requirePost(postId);
   const draft = storedDraft(post);
-  const json = buildPack(post, draft, await listPostAssets(postId));
+  let files: Awaited<ReturnType<typeof listPostAssets>>;
+  try {
+    files = await listPostAssets(postId, { requireShared: true });
+  } catch (error) {
+    if (error instanceof MediaProvenanceError) throw new PostEngineError(error.message, 409);
+    throw error;
+  }
+  const json = buildPack(post, draft, files);
   return { markdown: packMarkdown(json), json };
 }

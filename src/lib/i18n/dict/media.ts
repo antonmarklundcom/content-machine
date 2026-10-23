@@ -16,7 +16,15 @@ export const en = {
   "media.scan.button": "Scan now",
   "media.scan.running": "Scanning…",
   "media.scan.result": "{created} new, {existing} known, {updated} updated, {skipped} skipped.",
-  "media.scan.errors": "{n} files could not be read — run npm run media:scan for details.",
+  "media.scan.errors":
+    "{n} files need attention. Open the details below, correct the file or restore its original, and scan again.",
+  "media.scan.details": "Show files that need attention",
+  "media.scan.truncated":
+    "Showing the first 20 issues. Correct these files and scan again to see any remaining issues.",
+  "media.privacy.unavailable":
+    "The library cannot safely classify personal media. Reconnect storage, check access permissions, and retry.",
+  "media.provenance.hint":
+    "Older files without verified shared provenance stay hidden. Scan surviving ordinary shared sources, or ask the owner to review the exact legacy file using the private pilot guide. Private voice material always stays outside this library.",
   "media.filter.brand": "Brand",
   "media.filter.allBrands": "All brands",
   "media.filter.unsorted": "Unsorted",
@@ -109,7 +117,15 @@ export const sv: Record<keyof typeof en, string> = {
   "media.scan.running": "Skannar…",
   "media.scan.result":
     "{created} nya, {existing} kända, {updated} uppdaterade, {skipped} hoppade över.",
-  "media.scan.errors": "{n} filer gick inte att läsa — kör npm run media:scan för detaljer.",
+  "media.scan.errors":
+    "{n} filer behöver åtgärdas. Öppna detaljerna nedan, rätta filen eller återställ originalet och skanna igen.",
+  "media.scan.details": "Visa filer som behöver åtgärdas",
+  "media.scan.truncated":
+    "Visar de första 20 problemen. Rätta dessa filer och skanna igen för att se återstående problem.",
+  "media.privacy.unavailable":
+    "Biblioteket kan inte säkert klassificera personliga mediafiler. Anslut lagringen, kontrollera behörigheterna och försök igen.",
+  "media.provenance.hint":
+    "Äldre filer utan verifierat delningsunderlag förblir dolda. Skanna kvarvarande vanliga delade källfiler eller be ägaren granska den exakta äldre filen enligt den privata pilotguiden. Personligt röstmaterial ligger alltid utanför biblioteket.",
   "media.filter.brand": "Varumärke",
   "media.filter.allBrands": "Alla varumärken",
   "media.filter.unsorted": "Osorterat",

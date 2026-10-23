@@ -95,6 +95,8 @@ export default async function NewScriptPage({
         </p>
       ))}
       <StudioBriefForm
+        key={brand.id}
+        canGenerate={isOwner(user)}
         brands={brands.map((b) => ({ id: b.id, name: b.name, language: defaultScriptLanguage(b) }))}
         brandId={brand.id}
         videos={videos}

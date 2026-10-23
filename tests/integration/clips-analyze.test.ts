@@ -303,9 +303,7 @@ test("a playlist link is parked `unprocessed` rather than ingesting 200 videos",
   assert.equal(await monthToDateUsd(), 0);
 });
 
-test("a video with no transcript is `analyzed` without paying for anything", async () => {
-  // Not a failure: the road ends here for this video, and the video page says
-  // why. The clip inbox must not offer a retry that cannot succeed.
+test("a video with no captions requests manual evidence without claiming analysis or spending", async () => {
   await insertReturning(db, schema.videos, {
     youtubeId: YOUTUBE_ID,
     title: "Placeholder",
@@ -320,8 +318,8 @@ test("a video with no transcript is `analyzed` without paying for anything", asy
 
   assert.equal(response.status, 201);
   const [clip] = await db.select().from(schema.clips);
-  assert.equal(clip.status, "analyzed");
-  assert.equal(clip.error, null);
+  assert.equal(clip.status, "unprocessed");
+  assert.match(clip.error ?? "", /manual transcript/);
   assert.equal(fake.calls.length, 0);
   assert.equal(await monthToDateUsd(), 0);
 
@@ -330,4 +328,27 @@ test("a video with no transcript is `analyzed` without paying for anything", asy
     .from(schema.videos)
     .where(eq(schema.videos.youtubeId, YOUTUBE_ID));
   assert.equal(video.captionStatus, "none");
+});
+
+test("a transient caption failure remains retryable and does not claim an analysis", async () => {
+  const priorStrategies = process.env.CAPTION_STRATEGIES;
+  // This valid strategy uses global fetch, whose fixture rejects every caption URL.
+  // Only the metadata endpoint above returns a response; nothing reaches the network.
+  process.env.CAPTION_STRATEGIES = "watch-page";
+  try {
+    const response = await callRoute(
+      clips,
+      jsonPost("/api/clips", { url: CLIP_URL }, { authorization: `Bearer ${CLIP_TOKEN}` }),
+    );
+    assert.equal(response.status, 201);
+    const [clip] = await db.select().from(schema.clips);
+    assert.equal(clip.status, "failed");
+    assert.match(clip.error ?? "", /Caption fetching failed.*Retry/);
+    assert.equal((await db.select().from(schema.analyses)).length, 0);
+    assert.equal(fakeGeminiClient().calls.length, 0);
+    assert.equal(await monthToDateUsd(), 0);
+  } finally {
+    if (priorStrategies === undefined) delete process.env.CAPTION_STRATEGIES;
+    else process.env.CAPTION_STRATEGIES = priorStrategies;
+  }
 });

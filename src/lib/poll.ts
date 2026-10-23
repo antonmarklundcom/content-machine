@@ -1,4 +1,3 @@
-import { updateReturning } from "@/db/mutations";
 /**
  * The poll run — find new uploads on tracked sources, fetch their captions, and
  * submit the analysis work as a Batch API job (PLAN.md §1.2).
@@ -11,9 +10,16 @@ import { updateReturning } from "@/db/mutations";
  * but an exit code.
  */
 
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
-import { clips, sources, videos, type Source } from "@/db/schema";
+import { sources, videos, type Source } from "@/db/schema";
+import { reapStuckClips } from "@/lib/clips/recovery";
+import { listSourcesForPolling } from "@/lib/sources";
+export {
+  reapStuckClips,
+  CLIP_INGEST_TIMEOUT_MINUTES,
+  CLIP_INGEST_TIMEOUT_ERROR,
+} from "@/lib/clips/recovery";
 import {
   abandonStaleBatch,
   awaitBatch,
@@ -160,13 +166,7 @@ export async function pollSources(options: PollOptions = {}): Promise<PollResult
   const reapedClips = await reapStuckClips();
   if (reapedClips > 0) onProgress({ phase: "reaped", count: reapedClips });
 
-  const active = await db
-    .select()
-    .from(sources)
-    .where(eq(sources.active, true))
-    // Least-recently-polled first, so a run that dies partway still makes
-    // progress across the whole set over successive runs.
-    .orderBy(asc(sql`${sources.lastPolledAt} is null`), asc(sources.lastPolledAt));
+  const active = await listSourcesForPolling();
 
   onProgress({ phase: "sources", count: active.length });
 
@@ -410,36 +410,6 @@ export async function pollSources(options: PollOptions = {}): Promise<PollResult
     skipped: null,
     waited: { batchId: submission.batchId, finished, outcome },
   });
-}
-
-/** How long a clip may sit in `ingesting` before the poll run calls it dead. */
-export const CLIP_INGEST_TIMEOUT_MINUTES = 15;
-export const CLIP_INGEST_TIMEOUT_ERROR = "Ingest timed out — retry";
-
-/**
- * Fail clips stuck in `ingesting` (PLAN.md §1.21). A clip gets there when the
- * save route hands a YouTube link to ingest, and leaves when ingest finishes —
- * so a process killed in between (a closed laptop lid, a restarted dev server)
- * strands it for good, with no retry button, since the inbox offers retry only
- * on `failed`. Failing it with a retryable error puts it back in reach.
- *
- * One statement, time compared in SQL, same reason as the lease: the database
- * clock is the only one every caller shares.
- */
-export async function reapStuckClips(): Promise<number> {
-  const reaped = await updateReturning(
-    db,
-    clips,
-    { status: "failed", error: CLIP_INGEST_TIMEOUT_ERROR },
-    and(
-      eq(clips.status, "ingesting"),
-      // When ingest started, not when the link was saved: a retry of an
-      // old clip is fresh. Rows from before the column fall back to saved_at.
-      sql`coalesce(${clips.ingestStartedAt}, ${clips.savedAt}) < date_sub(current_timestamp(3), interval ${CLIP_INGEST_TIMEOUT_MINUTES} minute)`,
-    ),
-    { id: clips.id },
-  );
-  return reaped.length;
 }
 
 async function pollSource(

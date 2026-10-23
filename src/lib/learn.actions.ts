@@ -16,6 +16,8 @@ import { ForbiddenError } from "@/lib/auth/roles";
 import { requireOwner } from "@/lib/auth/session";
 import { processLearnClip } from "@/lib/learn/process";
 import { formatUsd } from "@/lib/spend";
+import { clipWorkLease, CLIP_WORK_LEASE_TTL_MS, CLIP_WORK_BUSY_MESSAGE } from "@/lib/clips/work";
+import { withLeaseCommit, withRenewableLease } from "@/lib/lease";
 
 export type LearnActionResult = { ok: true; message?: string } | { ok: false; error: string };
 
@@ -94,7 +96,10 @@ export async function deleteLearnAction(clipId: number): Promise<LearnActionResu
   const denied = await ownerOr("delete a learn item");
   if (denied) return denied;
   if (!isPositiveId(clipId)) return { ok: false, error: "No such item." };
-  await db.delete(clips).where(learnClip(clipId));
+  const held = await withRenewableLease(clipWorkLease(clipId), CLIP_WORK_LEASE_TTL_MS, (lease) =>
+    withLeaseCommit(lease, (tx) => tx.delete(clips).where(learnClip(clipId))),
+  );
+  if (!held.acquired) return { ok: false, error: CLIP_WORK_BUSY_MESSAGE };
   revalidatePath("/learn");
   revalidatePath("/inbox");
   return { ok: true };

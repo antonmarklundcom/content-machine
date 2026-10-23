@@ -13,6 +13,7 @@ import {
   type PostStatus,
   type SocialPlatform,
 } from "@/db/schema";
+import { isPrivateAsset, MediaProvenanceError } from "@/lib/media/privacy";
 
 /**
  * Reads over posts and their ordered assets (PLAN.md §1.40, §2). The body is
@@ -126,15 +127,28 @@ export async function listRelatedPosts(id: number): Promise<PostWithAccount[]> {
 
 export type PostAssetWithAsset = PostAsset & { asset: Asset };
 
-/** A post's files in position order. An attachment whose asset row is gone is skipped. */
-export async function listPostAssets(postId: number): Promise<PostAssetWithAsset[]> {
+/** Shared files only. Exports additionally refuse incomplete/unreviewed attachment sets. */
+export async function listPostAssets(
+  postId: number,
+  options: { requireShared?: boolean } = {},
+): Promise<PostAssetWithAsset[]> {
   const rows = await db
     .select({ link: postAssets, asset: assets })
     .from(postAssets)
     .innerJoin(assets, eq(assets.id, postAssets.assetId))
     .where(eq(postAssets.postId, postId))
     .orderBy(asc(postAssets.position));
-  return rows.map((r) => ({ ...r.link, asset: r.asset }));
+  const checked = await Promise.all(
+    rows.map(async (row) => ({
+      row,
+      blocked: await isPrivateAsset(row.asset).catch(() => true),
+    })),
+  );
+  if (options.requireShared && checked.some((item) => item.blocked))
+    throw new MediaProvenanceError();
+  return checked
+    .filter((item) => !item.blocked)
+    .map(({ row }) => ({ ...row.link, asset: row.asset }));
 }
 
 /** Scheduled posts whose time has come, oldest first — what `publish:due` works through (O13). */

@@ -6,6 +6,7 @@ import {
 } from "@google/genai";
 import type { Brand, PostFormat } from "@/db/schema";
 import { fakeGeminiClient, fakeGeminiEnabled } from "@/lib/ai-fake";
+import { assertGroundingBudgetPolicy } from "@/lib/grounding-budget";
 import {
   costUsdAtRates,
   DEFAULT_MODEL,
@@ -441,6 +442,7 @@ ${topic ? "Research this topic for this brand's niche and market" : "Research cu
   // both halves of the app share one budget rather than one each (PLAN.md
   // §1.10). Streaming, because 16k output tokens plus reasoning on a Pro model
   // is a long time to hold a request open with nothing coming back.
+  assertGroundingBudgetPolicy();
   const { text, costUsd, finishReason } = await withSpendCap(
     estimateContentPlanCostUsd(),
     async () => {
@@ -824,6 +826,7 @@ export async function structuredJson(opts: {
     });
     return { text, costUsd: 0, groundingQueries: 0, finishReason: provider };
   }
+  if (opts.webSearch) assertGroundingBudgetPolicy();
   return withSpendCap(opts.estimateUsd, async () => {
     const response = await dispatchSpend(() =>
       geminiClient().models.generateContent({

@@ -232,8 +232,8 @@ async function checkRender(
   assert.deepEqual(readFileSync(path.join(root, ...video.localPath.split("/"))), videoBytes);
   assert.equal(byId.get(row.srtAssetId!)?.mime, "application/x-subrip");
   assert.equal(byId.get(row.vttAssetId!)?.mime, "text/vtt");
-  assert.equal(byId.get(row.vttAssetId!)?.localPath, result.vttPath);
-  assert.equal(byId.get(row.srtAssetId!)?.localPath, result.srtPath);
+  assert.ok(byId.get(row.vttAssetId!)?.localPath?.startsWith("_originals/"));
+  assert.ok(byId.get(row.srtAssetId!)?.localPath?.startsWith("_originals/"));
   for (const [assetId, file] of [
     [row.srtAssetId!, result.srtPath],
     [row.vttAssetId!, result.vttPath],

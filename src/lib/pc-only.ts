@@ -18,7 +18,7 @@ export class PcOnlyError extends Error {
   constructor(feature: string) {
     super(
       `${feature} runs on the PC, not on the online app: it needs ffmpeg, the media drive` +
-        " (MEDIA_ROOT) or Claude Code. Open content-engine on your PC (start.bat) to do this.",
+        " (MEDIA_ROOT) or Claude Code. Open your local Content Machine workspace to do this; use its LOCAL-SETUP guide if it is not running.",
     );
     this.name = "PcOnlyError";
   }

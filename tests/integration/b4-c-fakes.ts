@@ -16,6 +16,7 @@ import sharp from "sharp";
 
 import { db, schema } from "@/db";
 import { registerFile } from "@/lib/media/register";
+import { approveSharedMediaIdentity } from "@/lib/media/privacy";
 import { narrationFolder } from "@/lib/storage/paths";
 import type { StoryDeps } from "@/lib/stories/deps";
 import type { RenderRequest } from "@/lib/video/contract";
@@ -106,11 +107,18 @@ export type FakeEngines = {
 
 let takeCounter = 0;
 
+function syntheticMediaRoot(): string {
+  const root = process.env.MEDIA_ROOT;
+  if (!root || path.dirname(path.resolve(root)) !== path.resolve(tmpdir()))
+    throw new Error("Fake story engines require the caller's isolated temporary MEDIA_ROOT.");
+  return root;
+}
+
 async function storeTake(
   req: NarrateRequest | ImportRecordingRequest,
   provider: "elevenlabs" | "manual",
 ): Promise<NarrateResult> {
-  const root = process.env.MEDIA_ROOT as string;
+  const root = syntheticMediaRoot();
   const durationMs = fakeDurationMs(req.text);
   const folder = narrationFolder(req);
   const name = `take-${++takeCounter}-${Date.now()}`;
@@ -204,12 +212,17 @@ export function fakeEngines(): FakeEngines {
     },
     renderVideo: async (req) => {
       rendered.push(req);
-      const root = process.env.MEDIA_ROOT as string;
+      const root = syntheticMediaRoot();
       const dir = path.join(root, ...req.outFolder.split("/"));
       mkdirSync(dir, { recursive: true });
       const caption = async (ext: "srt" | "vtt", mime: string, body: string) => {
         const rel = `${req.outFolder}/${req.outName}.${ext}`;
         writeFileSync(path.join(root, ...rel.split("/")), body);
+        const sha256 = createHash("sha256")
+          .update(body + rel)
+          .digest("hex");
+        // These are declared public synthetic caption fixtures, not imported private files.
+        await approveSharedMediaIdentity(sha256, root);
         const [a] = await insertReturning(
           db,
           schema.assets,
@@ -217,9 +230,7 @@ export function fakeEngines(): FakeEngines {
             kind: "document",
             mime,
             bytes: Buffer.byteLength(body),
-            sha256: createHash("sha256")
-              .update(body + rel)
-              .digest("hex"),
+            sha256,
             localPath: rel,
             source: "import",
           },

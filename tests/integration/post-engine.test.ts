@@ -25,6 +25,8 @@ import { fakeGeminiClient, PAYLOADS, USAGE, WEB_SEARCH_QUERIES } from "@/lib/ai-
 import { validatePostDraft, type PostDraft } from "@/lib/posts/contract";
 import type { PostBrief, PostPack } from "@/lib/posts/export";
 import { monthToDateUsd } from "@/lib/spend";
+import { approveSharedMediaIdentity } from "@/lib/media/privacy";
+import { configureSyntheticMediaRoot } from "./synthetic-media-root";
 
 import { callRoute, jsonPost, signIn } from "./route";
 import { resetTables, teardown } from "./setup";
@@ -52,6 +54,7 @@ const brand = (id: string, language: string, familyId: string | null = FAMILY) =
 
 let owner: Record<string, string> = {};
 let accounts: Record<string, number> = {};
+configureSyntheticMediaRoot("post-engine-fixture");
 
 beforeEach(async () => {
   process.env.MONTHLY_SPEND_CAP_USD = "5";
@@ -550,6 +553,7 @@ test("export: the brief lists every visual with its target file and the kit; the
     localPath: `${brief.folder}/01-cover.png`,
     source: "higgsfield",
   });
+  await approveSharedMediaIdentity(asset.sha256);
   await db.insert(schema.postAssets).values({ postId: source.id, assetId: asset.id, position: 1 });
   const pack = (await (await get("format=pack&as=json")).json()) as PostPack;
   assert.equal(pack.caption, source.caption);

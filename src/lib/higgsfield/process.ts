@@ -8,6 +8,7 @@ import { spawn, spawnSync, type ChildProcess } from "node:child_process";
  */
 
 const isWindows = process.platform === "win32";
+const ownedGroups = new WeakSet<ChildProcess>();
 
 /** One argument for cmd.exe: wrapped in quotes when it has anything special. */
 export function winQuote(arg: string): string {
@@ -35,7 +36,7 @@ export function spawnCli(
   opts: { cwd: string; env?: NodeJS.ProcessEnv },
 ): ChildProcess {
   const inv = invocation(bin, args);
-  return spawn(inv.command, inv.args, {
+  const child = spawn(inv.command, inv.args, {
     cwd: opts.cwd,
     env: opts.env ?? process.env,
     shell: inv.shell,
@@ -43,6 +44,14 @@ export function spawnCli(
     windowsHide: true,
     stdio: ["pipe", "pipe", "pipe"],
   });
+  ownedGroups.add(child);
+  // POSIX retains the owned process-group identity after its leader exits.
+  // Close inherited-pipe children too, instead of waiting on a dead wrapper.
+  child.once("exit", () => {
+    if (!isWindows) killChildTree(child);
+  });
+  child.once("close", () => ownedGroups.delete(child));
+  return child;
 }
 
 /** Whether a process with this pid exists (EPERM = exists, owned by someone else). */
@@ -74,10 +83,19 @@ export function killTree(pid: number | null | undefined): void {
   }
 }
 
-/** Numeric PIDs from rows are forbidden here; only a still-live owned child handle may be killed. */
+/** Numeric PIDs from rows are forbidden; only a child created by spawnCli is accepted. */
 export function killChildTree(child: ChildProcess): void {
-  if (child.exitCode !== null || child.signalCode !== null || child.killed) return;
-  killTree(child.pid);
+  if (!ownedGroups.has(child) || !child.pid) return;
+  if (!isWindows) {
+    try {
+      // A hard cancellation must also stop descendants that ignore SIGTERM.
+      process.kill(-child.pid, "SIGKILL");
+    } catch {
+      /* owned group already gone */
+    }
+  } else if (child.exitCode === null && child.signalCode === null) {
+    killTree(child.pid);
+  }
 }
 
 export type ExecResult = {

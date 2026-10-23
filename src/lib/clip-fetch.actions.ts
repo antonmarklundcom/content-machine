@@ -44,9 +44,10 @@ export async function fetchClipAction(clipId: number): Promise<ClipFetchActionRe
   if (!isPositiveId(clipId) || !(await getClip(clipId)))
     return { ok: false, error: "No such clip." };
 
-  const outcome = await fetchClip(clipId);
+  const outcome = await fetchClip(clipId, { force: true });
   revalidatePath(`/clips/${clipId}`);
   revalidatePath("/inbox");
+  revalidatePath("/learn");
   if (outcome.status === "done") {
     return { ok: true, message: `Transcribed (${formatUsd(outcome.costUsd)}).` };
   }

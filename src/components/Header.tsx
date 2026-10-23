@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { getSession } from "@/lib/auth/session";
-import { logout } from "@/lib/auth/actions";
+import { LogoutForm } from "./LogoutForm";
 import { spendStatus } from "@/lib/spend";
 import { getLocale } from "@/lib/i18n/server";
 import { translator } from "@/lib/i18n";
@@ -197,17 +197,7 @@ export async function Header() {
         <div className="flex w-full items-center justify-between gap-2 sm:w-auto sm:justify-start sm:gap-5">
           <LocaleToggle locale={locale} />
           {status && <SpendMeter status={status} locale={locale} />}
-          {user && (
-            <form action={logout}>
-              <button
-                type="submit"
-                title={user.email}
-                className="rounded-lg px-2 py-1 text-xs font-medium text-[var(--color-ink-muted)] transition-colors hover:text-[var(--color-ink)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]"
-              >
-                {t("login.signOut")}
-              </button>
-            </form>
-          )}
+          {user && <LogoutForm label={t("login.signOut")} />}
         </div>
       </div>
       {user && (

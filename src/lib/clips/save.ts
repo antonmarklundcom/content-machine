@@ -1,4 +1,4 @@
-import { updateReturning, upsertReturning } from "@/db/mutations";
+import { insertReturning, isDuplicateKey, updateReturning } from "@/db/mutations";
 import "server-only";
 import { isAutomationAllowed } from "@/lib/automation/store";
 import { eq, sql } from "drizzle-orm";
@@ -18,6 +18,19 @@ import { ingestUrl } from "@/lib/ingest";
 import { estimateAnalysisCostUsd, SpendCapExceededError, withSpendCap } from "@/lib/spend";
 import { parseYouTubeUrl } from "@/lib/youtube/url";
 import { canonicalClipUrl, CLIP_URL_LIMIT, platformForUrl } from "./url";
+import {
+  assertLeaseCurrent,
+  LeaseLostError,
+  withLeaseCommit,
+  withRenewableLease,
+  type Lease,
+} from "@/lib/lease";
+import {
+  clipWorkLease,
+  CLIP_WORK_LEASE_TTL_MS,
+  CLIP_NO_CAPTIONS_MESSAGE,
+  ClipWorkBusyError,
+} from "./work";
 
 /**
  * The write half of the clip inbox (PLAN.md §5.O2.1–2). Reads live in
@@ -82,16 +95,8 @@ export async function saveClip(input: SaveClipInput): Promise<SaveClipResult> {
   const note = cleanNote(input.note);
   const platform = platformForUrl(url);
 
-  // Asked before writing, because the row itself cannot answer it afterwards:
-  // a second save of an Instagram clip is byte-identical to a first one, and
-  // reporting "created" for it would tell the caller (and the Shortcut's
-  // success message) something untrue.
-  const existing = await db.select({ id: clips.id }).from(clips).where(eq(clips.url, url)).limit(1);
-
-  const [row] = await upsertReturning(
-    db,
-    clips,
-    {
+  try {
+    const [row] = await insertReturning(db, clips, {
       url,
       platform,
       note,
@@ -99,18 +104,56 @@ export async function saveClip(input: SaveClipInput): Promise<SaveClipResult> {
       purpose: input.purpose ?? "other",
       tags: normalizeTags(input.tags),
       source: input.source ?? "web",
-    },
-    {
-      target: clips.url,
-      set: {
-        // A re-save with no note keeps the note the clip already had — the
-        // share sheet sends an empty field far more often than a correction.
-        note: sql`coalesce(${note}, ${clips.note})`,
-      },
-    },
-  );
-
-  return { ok: true, clip: row, created: existing.length === 0 };
+    });
+    return { ok: true, clip: row, created: true };
+  } catch (error) {
+    if (!isDuplicateKey(error)) throw error;
+    // The failed insert transaction has rolled back before this update: no
+    // duplicate-INSERT shared lock is upgraded during concurrent first saves.
+    const [existing] = await db.select().from(clips).where(eq(clips.url, url)).limit(1);
+    if (!existing) throw error; // Never swallow an unrelated unique-key failure.
+    if (note === null || note === existing.note)
+      return { ok: true, clip: existing, created: false };
+    const held = await withRenewableLease(
+      clipWorkLease(existing.id),
+      CLIP_WORK_LEASE_TTL_MS,
+      (lease) =>
+        withLeaseCommit(lease, async (tx) => {
+          const [current] = await tx
+            .select()
+            .from(clips)
+            .where(eq(clips.id, existing.id))
+            .for("update");
+          if (!current) throw error;
+          const changed = note !== current.note;
+          const [row] = await updateReturning(
+            tx,
+            clips,
+            {
+              note,
+              ...(changed && current.purpose === "learn"
+                ? {
+                    summary: null,
+                    learnCategory: null,
+                    howToStart: null,
+                    learnDetails: null,
+                    error: null,
+                  }
+                : {}),
+            },
+            eq(clips.id, current.id),
+          );
+          return row;
+        }),
+    );
+    if (!held.acquired)
+      return {
+        ok: false,
+        error:
+          "This link is already saved and is being processed. Retry after it finishes to update its note.",
+      };
+    return { ok: true, clip: held.value, created: false };
+  }
 }
 
 export type ClipCaptureFields = { brandId: string | null; purpose: ClipPurpose; tags: string[] };
@@ -123,25 +166,32 @@ export async function updateClipCapture(
   clipId: number,
   fields: ClipCaptureFields,
 ): Promise<Clip | null> {
-  const [row] = await updateReturning(
-    db,
-    clips,
-    {
-      brandId: fields.brandId || null,
-      purpose: fields.purpose,
-      tags: normalizeTags(fields.tags),
-    },
-    eq(clips.id, clipId),
+  const held = await withRenewableLease(clipWorkLease(clipId), CLIP_WORK_LEASE_TTL_MS, (lease) =>
+    withLeaseCommit(lease, (tx) =>
+      updateReturning(
+        tx,
+        clips,
+        {
+          brandId: fields.brandId || null,
+          purpose: fields.purpose,
+          tags: normalizeTags(fields.tags),
+        },
+        eq(clips.id, clipId),
+      ),
+    ),
   );
-  return row ?? null;
+  if (!held.acquired) throw new ClipWorkBusyError();
+  return held.value[0] ?? null;
 }
 
-async function markFailed(clipId: number, error: string): Promise<Clip> {
-  const [row] = await updateReturning(
-    db,
-    clips,
-    { status: "failed", error: error.slice(0, 1024) },
-    eq(clips.id, clipId),
+async function markFailed(lease: Lease, clipId: number, error: string): Promise<Clip> {
+  const [row] = await withLeaseCommit(lease, (tx) =>
+    updateReturning(
+      tx,
+      clips,
+      { status: "failed", error: error.slice(0, 1024) },
+      eq(clips.id, clipId),
+    ),
   );
   return row;
 }
@@ -157,9 +207,8 @@ async function markFailed(clipId: number, error: string): Promise<Clip> {
  * Statuses, precisely:
  *   `failed`   — something retryable broke (ingest error, analysis error, cap
  *                reached). `error` says what; the inbox offers a retry.
- *   `analyzed` — the clip has a video and the pipeline went as far as it can.
- *                That includes a video with no captions or one screening culled:
- *                there is nothing left to retry, and the video page shows why.
+ *   `analyzed` — an analysis is available. Missing captions leave the clip
+ *                unprocessed with the manual-evidence recovery step.
  *
  * A playlist or channel link is left `unprocessed` on purpose — one clip is one
  * link, and quietly ingesting 200 videos from a saved link is not what saving a
@@ -169,49 +218,80 @@ export async function processYouTubeClip(
   clip: Clip,
   options: { automatic?: boolean } = {},
 ): Promise<Clip> {
+  const held = await withRenewableLease(
+    clipWorkLease(clip.id),
+    CLIP_WORK_LEASE_TTL_MS,
+    async (lease) => {
+      const [current] = await db.select().from(clips).where(eq(clips.id, clip.id)).limit(1);
+      if (!current) throw new Error("This clip no longer exists.");
+      if (current.status === "analyzed" || current.status === "promoted") return current;
+      if (options.automatic && !(await isAutomationAllowed("captureAnalysis"))) return current;
+      return processHeldYouTubeClip(current, options, lease);
+    },
+  );
+  if (!held.acquired) throw new ClipWorkBusyError();
+  return held.value;
+}
+
+async function processHeldYouTubeClip(
+  clip: Clip,
+  options: { automatic?: boolean },
+  lease: Lease,
+): Promise<Clip> {
   const ref = parseYouTubeUrl(clip.url);
-  if (!ref) return markFailed(clip.id, "Not a recognisable YouTube URL.");
+  if (!ref) return markFailed(lease, clip.id, "Not a recognisable YouTube URL.");
   if (ref.kind !== "video") {
-    const [row] = await updateReturning(
-      db,
-      clips,
-      {
-        status: "unprocessed",
-        error:
-          "This is a playlist or channel link, not a single video. " +
-          "Add it as a source in /youtube/sources to track it.",
-      },
-      eq(clips.id, clip.id),
+    const [row] = await withLeaseCommit(lease, (tx) =>
+      updateReturning(
+        tx,
+        clips,
+        {
+          status: "unprocessed",
+          error:
+            "This is a playlist or channel link, not a single video. " +
+            "Add it as a source in /youtube/sources to track it.",
+        },
+        eq(clips.id, clip.id),
+      ),
     );
     return row;
   }
 
-  await db
-    .update(clips)
-    .set({ status: "ingesting", error: null, ingestStartedAt: sql`current_timestamp(3)` })
-    .where(eq(clips.id, clip.id));
+  await withLeaseCommit(lease, (tx) =>
+    tx
+      .update(clips)
+      .set({ status: "ingesting", error: null, ingestStartedAt: sql`current_timestamp(3)` })
+      .where(eq(clips.id, clip.id)),
+  );
 
   let video: Video;
+  let captionsFailed = false;
   try {
+    await assertLeaseCurrent(lease);
     const summary = await ingestUrl(clip.url);
     const [ingested] = summary.videos;
-    if (!ingested) return markFailed(clip.id, "YouTube returned no metadata for this video.");
+    if (!ingested)
+      return markFailed(lease, clip.id, "YouTube returned no metadata for this video.");
     video = ingested;
+    captionsFailed = summary.captionCounts.failed > 0;
 
     // Whatever happens to the analysis below, the clip is already worth more
     // than it was: it has a video row, a title and a thumbnail. Write that
     // before spending anything.
-    await db
-      .update(clips)
-      .set({
-        videoId: video.id,
-        title: video.title,
-        author: video.channelTitle,
-        thumbnailUrl: video.thumbnailUrl,
-      })
-      .where(eq(clips.id, clip.id));
+    await withLeaseCommit(lease, (tx) =>
+      tx
+        .update(clips)
+        .set({
+          videoId: video.id,
+          title: video.title,
+          author: video.channelTitle,
+          thumbnailUrl: video.thumbnailUrl,
+        })
+        .where(eq(clips.id, clip.id)),
+    );
   } catch (err) {
-    return markFailed(clip.id, err instanceof Error ? err.message : "Ingest failed.");
+    if (err instanceof LeaseLostError) throw err;
+    return markFailed(lease, clip.id, err instanceof Error ? err.message : "Ingest failed.");
   }
 
   const [transcript] = await db
@@ -221,24 +301,27 @@ export async function processYouTubeClip(
     .limit(1);
 
   if (!transcript) {
-    // No captions is not a failure — it is the end of the road for this video,
-    // and the caption pipeline already recorded why on the video row.
-    const [row] = await updateReturning(
-      db,
-      clips,
-      { status: "analyzed", error: null },
-      eq(clips.id, clip.id),
+    if (captionsFailed)
+      return markFailed(
+        lease,
+        clip.id,
+        "Caption fetching failed. Retry, or add a manual transcript from YouTube Ingest.",
+      );
+    const [row] = await withLeaseCommit(lease, (tx) =>
+      updateReturning(
+        tx,
+        clips,
+        { status: "unprocessed", error: CLIP_NO_CAPTIONS_MESSAGE },
+        eq(clips.id, clip.id),
+      ),
     );
     return row;
   }
 
   try {
     if (options.automatic && !(await isAutomationAllowed("captureAnalysis"))) {
-      const [saved] = await updateReturning(
-        db,
-        clips,
-        { status: "unprocessed", error: null },
-        eq(clips.id, clip.id),
+      const [saved] = await withLeaseCommit(lease, (tx) =>
+        updateReturning(tx, clips, { status: "unprocessed", error: null }, eq(clips.id, clip.id)),
       );
       return saved;
     }
@@ -246,25 +329,25 @@ export async function processYouTubeClip(
     // Same call, same cap, as the single-video form path in ingest.actions.ts.
     // `analyzeVideo` no-ops when this video already has an analysis, so a
     // re-saved clip never pays twice.
+    await assertLeaseCurrent(lease);
     const result = await withSpendCap(estimatedUsd, () => analyzeVideo(video));
 
     if (result.status === "failed") {
-      return markFailed(clip.id, `Analysis failed: ${result.error}`);
+      return markFailed(lease, clip.id, `Analysis failed: ${result.error}`);
     }
-    const [row] = await updateReturning(
-      db,
-      clips,
-      { status: "analyzed", error: null },
-      eq(clips.id, clip.id),
+    const [row] = await withLeaseCommit(lease, (tx) =>
+      updateReturning(tx, clips, { status: "analyzed", error: null }, eq(clips.id, clip.id)),
     );
     return row;
   } catch (err) {
+    if (err instanceof LeaseLostError) throw err;
     if (err instanceof SpendCapExceededError) {
       // Retryable in the most literal sense: the same clip, next month or after
       // the cap is raised, analyses fine. Keep the video link.
-      return markFailed(clip.id, err.message);
+      return markFailed(lease, clip.id, err.message);
     }
     return markFailed(
+      lease,
       clip.id,
       err instanceof Error ? err.message : `Analysis of "${video.title}" failed.`,
     );

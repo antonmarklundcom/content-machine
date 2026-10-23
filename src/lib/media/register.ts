@@ -19,6 +19,12 @@ import {
 
 import { probeDuration } from "./probe";
 import { preserveOriginal } from "./originals";
+import {
+  isInternalMediaPath,
+  isPrivateMediaFile,
+  markSharedMediaFile,
+  privateMediaHashes,
+} from "./privacy";
 export { sha256File } from "./originals";
 
 /**
@@ -47,7 +53,7 @@ export type RegisterResult =
   /** The media drive is not there — a normal state, not an error. */
   | { status: "missing"; message: string }
   /** Not a file under the root, or not a kind of file the library holds. */
-  | { status: "rejected"; reason: "not_found" | "not_media"; message: string };
+  | { status: "rejected"; reason: "not_found" | "not_media" | "private_media"; message: string };
 
 /** Longest side of a thumbnail, px. */
 const THUMB_SIZE = 480;
@@ -112,21 +118,38 @@ async function locate(
  * moved into a post folder), blank prompt/model/brand from a manifest, a
  * missing thumbnail — and never overwrites what is already set.
  */
-export async function registerFile(input: string, meta: RegisterMeta = {}): Promise<RegisterResult> {
+export async function registerFile(
+  input: string,
+  meta: RegisterMeta = {},
+): Promise<RegisterResult> {
   const root = mediaRoot();
   const rootStatus = await mediaRootStatus(root);
   if (rootStatus === "missing") return { status: "missing", message: mediaRootMessage(rootStatus) };
 
   const located = await locate(input, root);
-  if ("message" in located) return { status: "rejected", reason: "not_found", message: located.message };
+  if ("message" in located)
+    return { status: "rejected", reason: "not_found", message: located.message };
+  await privateMediaHashes(root);
+  if (isInternalMediaPath(located.rel) || (await isPrivateMediaFile(located.rel, root)))
+    return {
+      status: "rejected",
+      reason: "private_media",
+      message:
+        "Personal voice material is available only through its owner tools and cannot enter the shared media library.",
+    };
   const original = await preserveOriginal(located.file, root);
   const rel = located.rel;
   const sniffed = original?.sniffed;
   if (!sniffed) {
-    return { status: "rejected", reason: "not_media", message: `Not an image, video, audio or PDF file: ${rel}` };
+    return {
+      status: "rejected",
+      reason: "not_media",
+      message: `Not an image, video, audio or PDF file: ${rel}`,
+    };
   }
 
   const { file, sha, bytes: size, rel: originalRel } = original!;
+  await markSharedMediaFile(located.rel, sha, root);
   const [found] = await db.select().from(assets).where(eq(assets.sha256, sha)).limit(1);
   if (found) return fillIn(found, originalRel, meta, file, root);
 
@@ -134,9 +157,13 @@ export async function registerFile(input: string, meta: RegisterMeta = {}): Prom
     sniffed.kind === "image"
       ? await imageFacts(file, sha, root)
       : { width: null, height: null, thumbPath: null };
-  const durationSec = sniffed.kind === "video" || sniffed.kind === "audio" ? await probeDuration(file) : null;
+  const durationSec =
+    sniffed.kind === "video" || sniffed.kind === "audio" ? await probeDuration(file) : null;
 
-  const [created] = await insertIfAbsent(db, assets, {
+  const [created] = await insertIfAbsent(
+    db,
+    assets,
+    {
       brandId: meta.brandId ?? null,
       accountId: meta.accountId ?? null,
       kind: sniffed.kind,
@@ -156,7 +183,9 @@ export async function registerFile(input: string, meta: RegisterMeta = {}): Prom
       status: meta.status ?? "new",
       altText: meta.altText ?? null,
       notes: meta.notes ?? null,
-    }, { target: assets.sha256 });
+    },
+    { target: assets.sha256 },
+  );
   if (created) return { status: "created", asset: created };
 
   // Lost a race with another registration of the same content: that row wins.
@@ -182,7 +211,8 @@ async function fillIn(
   if (!row.sourceRef && meta.sourceRef) patch.sourceRef = meta.sourceRef;
   if (!row.altText && meta.altText) patch.altText = meta.altText;
   // A manifest says where a loose file came from; "import" is the scanner's don't-know.
-  if (row.source === "import" && meta.source && meta.source !== "import") patch.source = meta.source;
+  if (row.source === "import" && meta.source && meta.source !== "import")
+    patch.source = meta.source;
   const tags = cleanTags([...row.tags, ...(meta.tags ?? [])]);
   if (tags.length !== row.tags.length) patch.tags = tags;
   if (row.kind === "image") {
@@ -194,6 +224,11 @@ async function fillIn(
   }
 
   if (!Object.keys(patch).length) return { status: "existing", asset: row, updated: false };
-  const [updated] = await updateReturning(db, assets, { ...patch, updatedAt: new Date() }, eq(assets.id, row.id));
+  const [updated] = await updateReturning(
+    db,
+    assets,
+    { ...patch, updatedAt: new Date() },
+    eq(assets.id, row.id),
+  );
   return { status: "existing", asset: updated, updated: true };
 }

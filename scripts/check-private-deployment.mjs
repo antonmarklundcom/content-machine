@@ -1,7 +1,24 @@
 import "dotenv/config";
 import { createConnection } from "mysql2/promise";
+import { checkPersistentMedia } from "./lib/persistent-media.mjs";
 const problems = [];
 const env = process.env;
+if (process.argv.includes("--media") || process.argv.includes("--media-write")) {
+  try {
+    await checkPersistentMedia(env.MEDIA_ROOT, process.cwd(), {
+      writeProbe: process.argv.includes("--media-write"),
+    });
+    console.log(
+      "Persistent media directory preflight passes. Existing media was not read; repeat after redeployment and verify independent backups separately.",
+    );
+  } catch (error) {
+    problems.push(error.message);
+  }
+} else {
+  console.log(
+    "Persistent media is unverified. Before using media, run deployment:check with --media (or --media-write for a synthetic write/read/delete probe).",
+  );
+}
 if (env.APP_MODE !== "online") problems.push("Set APP_MODE=online.");
 try {
   const url = new URL(env.APP_URL);

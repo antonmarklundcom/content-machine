@@ -22,9 +22,12 @@ import { getBrand } from "@/lib/bridge/brands";
 import { requireUser } from "@/lib/auth/session";
 import { entryCandidates } from "@/lib/media/manifest";
 import { scanMediaRoot } from "@/lib/media/scan";
+import { scanErrorDetails } from "@/lib/media/scan-result";
+import { privateMediaHashes } from "@/lib/media/privacy";
 import { localDriver } from "@/lib/storage/local";
 import { handleSegment, INBOX_DIR, segment } from "@/lib/storage/paths";
 import {
+  mediaRoot,
   mediaRootMessage,
   mediaRootStatus,
   resolveMediaFile,
@@ -233,6 +236,15 @@ export async function bulkMediaAction(input: BulkMediaInput): Promise<BulkMediaR
     return { ok: false, error: `Unknown action "${String(op)}".` };
   }
 
+  try {
+    await privateMediaHashes();
+  } catch {
+    return {
+      ok: false,
+      error:
+        "Reconnect media storage and check permissions before editing library assets; personal media could not be safely classified.",
+    };
+  }
   const rows = (await Promise.all(ids.map((id) => getAsset(id)))).filter(
     (row): row is Asset => row !== null,
   );
@@ -296,12 +308,23 @@ export type ScanNowResult = MediaActionResult<{
   updated: number;
   skipped: number;
   errors: number;
+  errorDetails: Array<{ path: string; message: string }>;
+  errorsTruncated: boolean;
 }>;
 
 /** "Scan now": register manifests and loose files under `MEDIA_ROOT` (O10's `scanMediaRoot`). */
 export async function scanNowAction(): Promise<ScanNowResult> {
   await requireUser();
-  const result = await scanMediaRoot();
+  let result;
+  try {
+    result = await scanMediaRoot();
+  } catch {
+    return {
+      ok: false,
+      error:
+        "The scan could not safely read media storage. Reconnect the drive, check access permissions, and retry.",
+    };
+  }
   if (result.status === "missing") return { ok: false, error: result.message };
   revalidatePath("/media");
   revalidatePath("/media/inbox");
@@ -312,5 +335,6 @@ export async function scanNowAction(): Promise<ScanNowResult> {
     updated: result.updated,
     skipped: result.skipped,
     errors: result.errors.length,
+    ...scanErrorDetails(result.errors, mediaRoot()),
   };
 }

@@ -8,6 +8,7 @@ import { asc, eq } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { listCalendarPosts, listPostAssets, listPosts } from "@/lib/bridge";
 import { exportPack } from "@/lib/posts/engine";
+import { GET as exportPostRoute } from "@/app/api/posts/[id]/export/route";
 import {
   adaptPostAction,
   attachAssetAction,
@@ -22,6 +23,8 @@ import {
 } from "@/lib/posts.actions";
 import type { PostDraft } from "@/lib/posts/contract";
 import { monthToDateUsd } from "@/lib/spend";
+import { approveSharedMediaIdentity } from "@/lib/media/privacy";
+import { configureSyntheticMediaRoot } from "./synthetic-media-root";
 
 import { callRoute, signIn } from "./route";
 import { resetTables, teardown } from "./setup";
@@ -72,6 +75,7 @@ const brand = (id: string, language: string) => ({
 let owner = "";
 let employee = "";
 let accounts: Record<string, number> = {};
+configureSyntheticMediaRoot("posts-ui-fixture");
 
 async function asset(n: number, brandId: string | null = "alpha") {
   const [row] = await insertReturning(db, schema.assets, {
@@ -83,6 +87,7 @@ async function asset(n: number, brandId: string | null = "alpha") {
     source: "higgsfield",
     localPath: `alpha/_brand/2026-09/file-${n}.webp`,
   });
+  await approveSharedMediaIdentity(row.sha256);
   return row.id;
 }
 
@@ -348,4 +353,82 @@ test("mark posted: the pack stamps published_at and the permalink; a posted post
     published.map((p) => p.id),
     [id],
   );
+});
+
+test("post attachments and export packs never disclose private or unreviewed metadata and cached public URLs", async () => {
+  const id = await draft("Synthetic provenance export regression");
+  const shared = await asset(991);
+  await db
+    .update(schema.assets)
+    .set({ publicUrl: "https://media.example.invalid/shared-synthetic.webp" })
+    .where(eq(schema.assets.id, shared));
+  assert.equal((await as(employee, () => attachAssetAction(id, shared))).ok, true);
+  const sharedPack = (await exportPack(id)).json;
+  assert.equal(sharedPack.files[0].assetId, shared);
+  assert.equal(
+    sharedPack.files[0].publicUrl,
+    "https://media.example.invalid/shared-synthetic.webp",
+  );
+
+  const hidden: number[] = [];
+  for (const [sha, localPath, publicUrl] of [
+    [
+      "e".repeat(64),
+      "voice/_consent/private-synthetic-person.png",
+      "https://media.example.invalid/private-cached-synthetic.png",
+    ],
+    [
+      "f".repeat(64),
+      `_originals/ff/${"f".repeat(64)}.png`,
+      "https://media.example.invalid/unreviewed-cached-synthetic.png",
+    ],
+  ]) {
+    const [row] = await insertReturning(db, schema.assets, {
+      brandId: "alpha",
+      kind: "image",
+      mime: "image/png",
+      bytes: 100,
+      sha256: sha,
+      source: "import",
+      localPath,
+      publicUrl,
+      status: "approved",
+      altText: "private-synthetic-alt-text",
+    });
+    hidden.push(row.id);
+    const refused = await as(employee, () => attachAssetAction(id, row.id));
+    assert.equal(
+      refused.ok,
+      false,
+      "old approved status and matching brand do not authorize attachment",
+    );
+    assert.match(refused.ok ? "" : refused.error, /Private or unreviewed/);
+    // Reproduce a pre-fix/manual database attachment without using the guarded action.
+    await db
+      .insert(schema.postAssets)
+      .values({ postId: id, assetId: row.id, position: hidden.length + 1, role: "slide" });
+  }
+  assert.deepEqual(
+    (await listPostAssets(id)).map((row) => row.assetId),
+    [shared],
+    "post editor receives only classified shared metadata",
+  );
+  await assert.rejects(exportPack(id), /Private or unreviewed/);
+  for (const cookie of [employee, owner]) {
+    const response = await callRoute(
+      (request) => exportPostRoute(request, { params: Promise.resolve({ id: String(id) }) }),
+      new Request(`http://localhost/api/posts/${id}/export?format=pack&as=json`, {
+        headers: { cookie },
+      }),
+    );
+    assert.equal(response.status, 409);
+    const text = await response.text();
+    for (const forbidden of [
+      "private-cached-synthetic.png",
+      "unreviewed-cached-synthetic.png",
+      "private-synthetic-person.png",
+      "private-synthetic-alt-text",
+    ])
+      assert.equal(text.includes(forbidden), false, forbidden);
+  }
 });

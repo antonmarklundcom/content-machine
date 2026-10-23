@@ -6,12 +6,14 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, before, beforeEach, test } from "node:test";
 import sharp from "sharp";
+import { eq } from "drizzle-orm";
 
 import { db, schema } from "@/db";
 import { mediaQueryFrom, type MediaSearchParams } from "@/app/media/query";
 import { getAsset, listAssets } from "@/lib/bridge/assets";
 import { sha256File } from "@/lib/media/register";
 import { bulkMediaAction, scanNowAction } from "@/lib/media.actions";
+import { approveSharedMediaIdentity } from "@/lib/media/privacy";
 
 import { callRoute, signIn } from "./route";
 import { resetTables, teardown } from "./setup";
@@ -72,6 +74,8 @@ async function asset(values: Partial<typeof schema.assets.$inferInsert> = {}) {
     source: "higgsfield",
     ...values,
   });
+  // This metadata-only fixture explicitly represents synthetic shared editorial content.
+  await approveSharedMediaIdentity(row.sha256, root);
   return row;
 }
 
@@ -339,14 +343,29 @@ test("media drive not connected: assign keeps the row change and warns; scan say
   const result = await as(user, () =>
     bulkMediaAction({ ids: [a.id], op: "assign", brandId: "guide" }),
   );
-  assert.equal(result.ok, true);
-  assert.equal(result.ok && result.moved, 0);
-  assert.match(result.ok ? result.warnings[0] : "", /not connected/);
-  const row = (await getAsset(a.id))!;
-  assert.equal(row.brandId, "guide");
+  assert.equal(result.ok, false);
+  assert.match(result.ok ? "" : result.error, /Reconnect media storage/);
+  const [row] = await db.select().from(schema.assets).where(eq(schema.assets.id, a.id));
+  assert.equal(
+    row.brandId,
+    a.brandId,
+    "unavailable privacy state cannot authorize a shared-library edit",
+  );
   assert.equal(row.localPath, "_inbox/higgsfield/2026-09-27/a.png");
 
   const scan = await as(user, () => scanNowAction());
   assert.equal(scan.ok, false);
   assert.match(scan.ok ? "" : scan.error, /not connected/);
+});
+
+test("scan reports actionable bounded file details in the browser result", async () => {
+  write("broken/manifest.json", "{invalid json");
+  const result = await as(user, () => scanNowAction());
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  assert.equal(result.errors, 1);
+  assert.deepEqual(result.errorDetails, [
+    { path: "broken/manifest.json", message: "Not a JSON manifest." },
+  ]);
+  assert.equal(result.errorsTruncated, false);
 });

@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { open, readdir, rm, stat } from "node:fs/promises";
+import { open, readdir, readFile, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import { localDriver } from "@/lib/storage/local";
 import { promoteStaged } from "@/lib/storage/promote.mjs";
@@ -28,11 +28,33 @@ async function header(file: string): Promise<Buffer> {
 
 export type Original = { file: string; rel: string; sha: string; bytes: number; sniffed: Sniffed };
 
+/** Caption formats are accepted only when their stored MIME is explicitly supplied. */
+async function captionType(file: string, mime?: string): Promise<Sniffed | null> {
+  if (mime !== "application/x-subrip" && mime !== "text/vtt") return null;
+  const info = await stat(file);
+  if (info.size > 4 * 1024 * 1024) return null;
+  const text = new TextDecoder("utf-8", { fatal: true }).decode(await readFile(file));
+  if (text.includes("\0")) return null;
+  if (mime === "text/vtt" && /^WEBVTT(?:\s|$)/.test(text))
+    return { kind: "document", mime, ext: "vtt" };
+  if (
+    mime === "application/x-subrip" &&
+    (!text.trim() ||
+      /^\d+\r?\n\d{2}:\d{2}:\d{2},\d{3} --> \d{2}:\d{2}:\d{2},\d{3}(?:\s|$)/.test(text))
+  )
+    return { kind: "document", mime, ext: "srt" };
+  return null;
+}
+
 /** Hash a completed snapshot, then atomically expose it by content identity.
  * All metadata describes the copied bytes, even if a source changes mid-import.
  * Existing originals are never overwritten, including a tampered original.
  */
-export async function preserveOriginal(file: string, root = mediaRoot()): Promise<Original | null> {
+export async function preserveOriginal(
+  file: string,
+  root = mediaRoot(),
+  mime?: string,
+): Promise<Original | null> {
   const driver = localDriver(root);
   const stage = `${ORIGINALS_DIR}/${randomUUID()}.tmp`;
   const copied = await driver.put(stage, { file });
@@ -40,7 +62,7 @@ export async function preserveOriginal(file: string, root = mediaRoot()): Promis
   let ready: string | null = null;
   try {
     const snapshot = path.join(root, ...stage.split("/"));
-    const sniffed = sniffMime(await header(snapshot));
+    const sniffed = sniffMime(await header(snapshot)) ?? (await captionType(snapshot, mime));
     if (!sniffed) return null;
     const sha = await sha256File(snapshot);
     const rel = `${ORIGINALS_DIR}/${sha.slice(0, 2)}/${sha}.${sniffed.ext}`;
@@ -55,8 +77,10 @@ export async function preserveOriginal(file: string, root = mediaRoot()): Promis
       if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
     }
     const safe = await resolveMediaFile(splitRelative(rel)!, root);
-    if (!safe || await sha256File(safe) !== sha)
-      throw new Error("Stored original no longer matches its hash. Restore it from backup before reviewing or publishing.");
+    if (!safe || (await sha256File(safe)) !== sha)
+      throw new Error(
+        "Stored original no longer matches its hash. Restore it from backup before reviewing or publishing.",
+      );
     return { file: safe, rel, sha, bytes: (await stat(safe)).size, sniffed };
   } finally {
     await rm(path.join(root, ...stage.split("/")), { force: true });
@@ -66,7 +90,7 @@ export async function preserveOriginal(file: string, root = mediaRoot()): Promis
 
 /** Existing immutable bytes win; legacy sources must still match their SHA. */
 export async function assetOriginal(
-  asset: { localPath: string | null; sha256: string },
+  asset: { localPath: string | null; sha256: string; mime?: string },
   root = mediaRoot(),
 ): Promise<{ file: string; rel: string } | null> {
   if (!/^[a-f0-9]{64}$/i.test(asset.sha256)) return null;
@@ -77,11 +101,11 @@ export async function assetOriginal(
     if (!name.startsWith(`${sha}.`)) continue;
     const rel = `${folder}/${name}`;
     const file = await resolveMediaFile(splitRelative(rel)!, root);
-    if (file && await sha256File(file) === sha) return { file, rel };
+    if (file && (await sha256File(file)) === sha) return { file, rel };
   }
   const segments = asset.localPath ? splitRelative(asset.localPath) : null;
   const file = segments ? await resolveMediaFile(segments, root) : null;
-  if (!file || await sha256File(file) !== sha) return null;
-  const original = await preserveOriginal(file, root);
+  if (!file || (await sha256File(file)) !== sha) return null;
+  const original = await preserveOriginal(file, root, asset.mime);
   return original?.sha === sha ? original : null;
 }

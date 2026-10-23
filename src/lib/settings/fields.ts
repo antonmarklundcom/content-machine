@@ -62,9 +62,20 @@ export const SETTING_FIELDS: SettingField[] = [
   },
   {
     key: "MONTHLY_SPEND_CAP_USD",
-    label: "Monthly Gemini spend cap (USD)",
-    help: "The app refuses paid Gemini calls above this. Subscription-mode calls count as $0.",
+    label: "Monthly paid-provider budget (USD)",
+    help: "New calls reserve their estimated cost. Search grounding can exceed that reservation; actual usage is recorded afterwards. Subscription CLI calls count as $0 here. Select strict grounding below to block unbounded Search calls.",
     kind: "text",
+    required: false,
+  },
+  {
+    key: "GROUNDING_BUDGET_MODE",
+    label: "Search grounding budget policy",
+    help: "Estimated preserves current research workflows and may overshoot a reservation. Strict blocks Google Search calls before dispatch; source-based work remains available. Hosted changes use private environment settings.",
+    kind: "select",
+    options: [
+      { value: "estimated", label: "Estimated Search budget" },
+      { value: "strict", label: "Strict: block unbounded Search" },
+    ],
     required: false,
   },
   // --- build 4 (docs/PLAN-build4.md) -----------------------------------------

@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, desc, eq, gte, isNull, lt, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNull, lt, notInArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { queryRows } from "@/db/mutations";
 import {
@@ -13,6 +13,7 @@ import {
   type PostAssetRole,
   type PostStatus,
 } from "@/db/schema";
+import { isPrivateAsset, privateMediaHashes, sharedMediaHashes } from "@/lib/media/privacy";
 
 /**
  * Reads over the media library (PLAN.md §1.41, §2). Rows only — the bytes are
@@ -38,7 +39,25 @@ export type AssetsQuery = {
   page?: number;
 };
 
-export type AssetsPage = { assets: Asset[]; total: number; page: number; totalPages: number };
+export type AssetsPage = {
+  assets: Asset[];
+  total: number;
+  page: number;
+  totalPages: number;
+  privacyUnavailable?: boolean;
+};
+
+async function libraryPrivacyConditions() {
+  const hashes = [...(await privateMediaHashes())];
+  const shared = [...(await sharedMediaHashes())];
+  const privatePath = "^(media/)?(voice/_(consent|references|datasets)(/|$)|_private(/|$))";
+  return and(
+    shared.length ? inArray(assets.sha256, shared) : sql`false`,
+    hashes.length ? notInArray(assets.sha256, hashes) : undefined,
+    sql`coalesce(lower(replace(${assets.localPath}, char(92), '/')), '') not regexp ${privatePath}`,
+    sql`coalesce(lower(replace(${assets.sourceRef}, char(92), '/')), '') not regexp ${privatePath}`,
+  );
+}
 
 function assetConditions(query: AssetsQuery) {
   return and(
@@ -56,7 +75,13 @@ function assetConditions(query: AssetsQuery) {
 
 /** The library grid: newest first, filtered, one page. */
 export async function listAssets(query: AssetsQuery = {}): Promise<AssetsPage> {
-  const where = assetConditions(query);
+  let privacy;
+  try {
+    privacy = await libraryPrivacyConditions();
+  } catch {
+    return { assets: [], total: 0, page: 1, totalPages: 1, privacyUnavailable: true };
+  }
+  const where = and(assetConditions(query), privacy);
   const [{ total }] = await db
     .select({ total: sql<number>`count(*)` })
     .from(assets)
@@ -75,7 +100,8 @@ export async function listAssets(query: AssetsQuery = {}): Promise<AssetsPage> {
 
 export async function getAsset(id: number): Promise<Asset | null> {
   const [row] = await db.select().from(assets).where(eq(assets.id, id)).limit(1);
-  return row ?? null;
+  if (!row) return null;
+  return (await isPrivateAsset(row).catch(() => true)) ? null : row;
 }
 
 /** The dedupe lookup (§1.41): one row per file content, wherever it sits. */
@@ -85,16 +111,24 @@ export async function getAssetBySha256(sha256: string): Promise<Asset | null> {
     .from(assets)
     .where(eq(assets.sha256, sha256.toLowerCase()))
     .limit(1);
-  return row ?? null;
+  if (!row) return null;
+  return (await isPrivateAsset(row).catch(() => true)) ? null : row;
 }
 
 /** Every tag in use with how many assets carry it, most used first — the filter's options. */
 export async function listAssetTags(): Promise<Array<{ tag: string; count: number }>> {
+  let privacy;
+  try {
+    privacy = await libraryPrivacyConditions();
+  } catch {
+    return [];
+  }
   const rows = await queryRows<{ tag: string; count: number }>(
     db,
     sql`
     select t.tag, count(*) as count
     from ${assets}, json_table(${assets.tags}, '$[*]' columns(tag longtext path '$')) as t
+    where ${privacy}
     group by t.tag
     order by count desc, t.tag asc
   `,

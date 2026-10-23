@@ -3,6 +3,7 @@ import { asc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { assets, postAssets, socialAccounts, users, type Post } from "@/db/schema";
 import { assetProblem, targetSnapshot, type SendAsset } from "./safety";
+import { isPrivateAsset } from "@/lib/media/privacy";
 
 type Reader = Pick<typeof db, "select">;
 export class SendRefusal extends Error {}
@@ -59,6 +60,19 @@ export async function sendSnapshot(
     )
     .orderBy(asc(assets.id));
   const media = attached.length ? await (lock ? query.for("update") : query) : [];
+  for (const asset of media) {
+    try {
+      if (await isPrivateAsset(asset))
+        throw new SendRefusal(
+          "Private or unreviewed media cannot be approved or sent. Rescan surviving ordinary sources or review its identity first.",
+        );
+    } catch (error) {
+      if (error instanceof SendRefusal) throw error;
+      throw new SendRefusal(
+        "Media privacy classification is unavailable. Reconnect or restore the media library before approving a send.",
+      );
+    }
+  }
   const byId = new Map(media.map((a) => [a.id, a]));
   const list: SendAsset[] = attached.map((a) => {
     const m = byId.get(a.assetId);

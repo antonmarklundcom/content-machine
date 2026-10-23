@@ -44,13 +44,13 @@ const BRANDS_SQL = "select id from brands where active = true";
 
 /**
  * The one write. Same semantics as saveClip(): insert, or on a re-save of the
- * same canonical URL keep the row and only replace the note — and keep the old
- * note when the new message has none. LAST_INSERT_ID exposes the conflict row;
- * the mysql2 adapter uses affectedRows to preserve the creation reply.
+ * same canonical URL keep the row. LAST_INSERT_ID exposes the conflict row;
+ * the mysql2 adapter separately updates changed notes under the app's shared
+ * clip lease, preserving the creation reply and invalidating learned context.
  */
 export const SAVE_SQL = `insert into clips (url, platform, note, brand_id, purpose, tags, source, telegram_file_id)
 values (?, ?, ?, ?, ?, ?, 'telegram', ?)
-on duplicate key update id = last_insert_id(id), note = if(url = values(url), coalesce(values(note), clips.note), clips.note)`;
+on duplicate key update id = last_insert_id(id)`;
 
 /**
  * `/done <id>` and `/commit <id>` from the weekly learn nudge (build 4 §3.E):
@@ -204,6 +204,11 @@ export async function handleWebhook(request: Request, env: Env, query: Query): P
     ]);
 
     const created = rows[0]?.created === true;
+    if (rows[0]?.busy === true)
+      return reply(
+        message,
+        "Already saved. This item is being processed; send it again when it finishes to update its note.",
+      );
     if (!created) return reply(message, "Already saved, note updated");
     return reply(message, `Saved ✓ (${parsed.brandId ?? "no brand"}, ${PURPOSE_LABEL[purpose]})`);
   } catch (err) {

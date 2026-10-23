@@ -1,5 +1,9 @@
 # Content Machine — conversion findings
 
+## Reliability and privacy follow-up — 23 October 2026
+
+The merged PR4 workspace was inspected at main `f3414ac8`. [The implementation note](OVERNIGHT-FIXES-2026-10-23.md) maps review B01–B15 to corrections and documents private/shared media provenance, safe legacy review, clip/render ownership, manual transcript consistency, pinned property fetching, login/logout controls and optional strict grounding. No schema migration, provider call, publication or deployment is part of this follow-up. Validation and exact revision are recorded in its PR and owner manual; earlier sections remain historical.
+
 2026-10-08. Source: Content Engine `4c8c735880ffa45810997b7c778163ec78e5d89e`. Target: the conversion PR in `content-machine`. This register records confirmed code defects found and corrected during conversion; it is not evidence of real public incidents or paid charges. P1 means installation, data or publication integrity; P2 means material reliability, operator effort or budget accounting. Native CI results are recorded in [the completion report](CONVERSION-REPORT.md). No complete-bug-coverage claim.
 
 The inherited BUG-01…15 fixes remain in the imported baseline; [their original correction register](AUDIT-FIXES-2026-10-08.md) is historical evidence. BUG-16…22 were independently traced again and correspond to CM-BUG-01…07 below. New conversion findings have separate IDs. Source checkout and its Git history were preserved.

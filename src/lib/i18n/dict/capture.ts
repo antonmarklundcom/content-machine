@@ -1,6 +1,12 @@
 /** Telegram capture and the inbox's brand/purpose/tag filters (PLAN.md §6.S16). */
 
 export const en = {
+  "capture.error.expired": "Your session expired. Your text is still here.",
+  "capture.signInRetry": "Sign in in a new tab, then retry here (opens a new tab).",
+  "capture.error.network":
+    "The connection was interrupted. Your link and note are still here. Retry to confirm the save.",
+  "capture.error.receipt":
+    "The save could not be confirmed. Your link and note are still here. Retry to confirm the save.",
   "capture.title": "Capture",
   "capture.filter.allBrands": "All brands",
   "capture.filter.allPurposes": "All purposes",
@@ -31,6 +37,12 @@ export const en = {
 } as const;
 
 export const sv: Record<keyof typeof en, string> = {
+  "capture.error.expired": "Din session har gått ut. Din text finns kvar här.",
+  "capture.signInRetry": "Logga in i en ny flik och försök igen här (öppnas i en ny flik).",
+  "capture.error.network":
+    "Anslutningen avbröts. Din länk och notering finns kvar. Försök igen för att bekräfta att det sparats.",
+  "capture.error.receipt":
+    "Det gick inte att bekräfta att länken sparats. Din länk och notering finns kvar. Försök igen för att bekräfta.",
   "capture.title": "Fånga",
   "capture.filter.allBrands": "Alla varumärken",
   "capture.filter.allPurposes": "Alla syften",

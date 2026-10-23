@@ -530,6 +530,24 @@ test("aiinsights rows map onto learn clips (URL, steps, category, implemented, s
   assert.equal(mapAiinsightsItem({ url: null }), null);
 });
 
+test("imported UTC timestamps without an offset do not use the PC timezone", () => {
+  const naive = mapAiinsightsItem({
+    id: 123,
+    url: "https://synthetic.invalid/utc-import",
+    created_at: "2025-05-01 12:34:56.789",
+    updated_at: "2025-06-01 00:00:00",
+    implemented: true,
+  })!;
+  assert.equal(naive.savedAt!.toISOString(), "2025-05-01T12:34:56.789Z");
+  assert.equal(naive.implementedAt!.toISOString(), "2025-06-01T00:00:00.000Z");
+  const zoned = mapAiinsightsItem({
+    id: 124,
+    url: "https://synthetic.invalid/zoned-import",
+    created_at: "2025-05-01T12:34:56-03:00",
+  })!;
+  assert.equal(zoned.savedAt!.toISOString(), "2025-05-01T15:34:56.000Z");
+});
+
 test("the import is idempotent by canonical URL and honours --dry-run", async () => {
   await seedAiinsightsFixture();
   await db.insert(schema.clips).values({ url: "https://example.com/existing", purpose: "inspo" });

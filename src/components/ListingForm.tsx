@@ -27,9 +27,11 @@ const SHORT_FIELDS: { key: TextField; label: TranslationKey }[] = [
 export function ListingForm({
   brands,
   brandId: initialBrand,
+  canGenerate,
 }: {
   brands: { id: string; name: string; language: ScriptLanguage }[];
   brandId: string;
+  canGenerate: boolean;
 }) {
   const t = useTranslator();
   const router = useRouter();
@@ -257,7 +259,7 @@ export function ListingForm({
         <button
           type="button"
           className={STUDIO_PRIMARY}
-          disabled={!canWrite || busy !== null}
+          disabled={!canGenerate || !canWrite || busy !== null}
           onClick={() => write("short")}
         >
           {busy === "short" ? t("listing.writing") : t("listing.writeShort")}
@@ -266,7 +268,7 @@ export function ListingForm({
         <button
           type="button"
           className={STUDIO_PRIMARY}
-          disabled={!canWrite || busy !== null}
+          disabled={!canGenerate || !canWrite || busy !== null}
           onClick={() => write("tour")}
         >
           {busy === "tour" ? t("listing.writing") : t("listing.writeTour")}

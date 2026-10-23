@@ -1,5 +1,6 @@
 import { translator, type Locale } from "@/lib/i18n";
 import { formatUsd, type SpendStatus } from "@/lib/spend";
+import { groundingBudgetMode } from "@/lib/grounding-budget";
 
 /**
  * Renders the cap, not just the spend (docs/HANDOFF-SONNET.md §6, PR-08 row) —
@@ -22,7 +23,7 @@ export function SpendMeter({ status, locale }: { status: SpendStatus; locale: Lo
   return (
     <div
       className="flex flex-col gap-1.5"
-      title={`${formatUsd(status.projectedUsd)} / ${formatUsd(status.capUsd)} ${t("spend.tooltip")}${committed}`}
+      title={`${formatUsd(status.projectedUsd)} / ${formatUsd(status.capUsd)} ${t("spend.tooltip")}${committed}. ${groundingBudgetMode() === "strict" ? "Strict mode: unbounded Search calls blocked." : "Estimated Search reservations can be exceeded by the provider."}`}
     >
       <div className="flex items-baseline gap-1.5 text-sm">
         <span className="font-medium text-[var(--color-ink)]">

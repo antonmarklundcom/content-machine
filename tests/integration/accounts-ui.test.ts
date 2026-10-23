@@ -22,6 +22,8 @@ import {
 
 import { callRoute, signIn } from "./route";
 import { resetTables, teardown } from "./setup";
+import { approveSharedMediaIdentity } from "@/lib/media/privacy";
+import { configureSyntheticMediaRoot } from "./synthetic-media-root";
 
 /**
  * S13's server actions (PLAN.md §6.S13): a family, a brand in it, an account
@@ -79,6 +81,7 @@ const BRAND = {
 
 let owner = "";
 let employee = "";
+configureSyntheticMediaRoot("accounts-ui-fixture");
 
 beforeEach(async () => {
   await resetTables();
@@ -147,6 +150,7 @@ test("the owner creates a family, a brand in it, an account and a kit", async ()
     sha256: "b".repeat(64),
     source: "upload",
   });
+  await approveSharedMediaIdentity(logo.sha256);
   const kit = await as(owner, () =>
     saveKitAction(
       null,
@@ -322,6 +326,8 @@ test("kits refuse a bad hex and a logo that is not this brand's image", async ()
       source: "upload",
     },
   ]);
+  await approveSharedMediaIdentity(video.sha256);
+  await approveSharedMediaIdentity(foreign.sha256);
   for (const bad of [
     { brandId: "test-brand", colorHex: "#12345" },
     { brandId: "test-brand", colorHex: "blue" },

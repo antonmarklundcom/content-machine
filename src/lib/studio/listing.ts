@@ -9,9 +9,9 @@ import type {
 /**
  * A property listing → an on-camera script (build 2b, idea 8).
  *
- * Pure: the page fetch takes its `fetch` as an argument and nothing here
- * touches the database or the model, so the parser and the post-processing
- * are unit-tested against fixtures. The paid call is in `listing.actions.ts`.
+ * Pure: nothing here touches the network, database or model. The parser and
+ * post-processing use fixtures. Network reads live in listing-fetch.ts and
+ * the paid call is in listing.actions.ts.
  *
  * No HTML parser dependency: a listing page gives up what a script needs in
  * two places a regex reads reliably — its `<meta property="og:…">` tags and its
@@ -341,118 +341,7 @@ export function parseListingHtml(html: string, pageUrl: string): ListingFields {
 // fetching
 // ---------------------------------------------------------------------------
 
-export const LISTING_FETCH_TIMEOUT_MS = 10_000;
-/** A listing page is well under this; anything bigger is not one. */
-const MAX_PAGE_BYTES = 3_000_000;
-const MAX_REDIRECTS = 5;
-
-export class ListingFetchError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "ListingFetchError";
-  }
-}
-
-/**
- * Hosts this app must never fetch on a pasted URL's say-so: the PC it runs on
- * and its LAN. A cheap literal check — the page fetch is signed-in only and
- * returns parsed fields, not the raw body.
- */
-function isPrivateHost(hostname: string): boolean {
-  const h = hostname.replace(/^\[|\]$/g, "").toLowerCase();
-  if (
-    h === "localhost" ||
-    h.endsWith(".localhost") ||
-    h.endsWith(".local") ||
-    h === "::1" ||
-    h === "::"
-  )
-    return true;
-  const v4 = h.match(/^(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
-  if (v4) {
-    const [a, b] = [Number(v4[1]), Number(v4[2])];
-    return (
-      a === 0 ||
-      a === 10 ||
-      a === 127 ||
-      (a === 169 && b === 254) ||
-      (a === 172 && b >= 16 && b <= 31) ||
-      (a === 192 && b === 168)
-    );
-  }
-  return /^(fc|fd|fe80:)/.test(h);
-}
-
-/** A pasted listing URL, checked: http(s), public host. Throws `ListingFetchError` with a reason to show. */
-export function checkListingUrl(raw: string): URL {
-  let url: URL;
-  try {
-    url = new URL(raw.trim());
-  } catch {
-    throw new ListingFetchError(
-      "That is not a URL. Paste the listing's full address, starting with https://.",
-    );
-  }
-  if (url.protocol !== "https:" && url.protocol !== "http:") {
-    throw new ListingFetchError("Only http(s) listing pages can be read.");
-  }
-  if (isPrivateHost(url.hostname))
-    throw new ListingFetchError("That address is on this computer or its network.");
-  return url;
-}
-
-/**
- * Fetch a listing page (10 s timeout, HTML only, size-capped) and parse it.
- * `fetchImpl` is injected so tests never reach the network.
- */
-export async function fetchListing(
-  rawUrl: string,
-  fetchImpl: typeof fetch = fetch,
-  timeoutMs = LISTING_FETCH_TIMEOUT_MS,
-): Promise<ListingFields> {
-  let url = checkListingUrl(rawUrl);
-  const signal = AbortSignal.timeout(timeoutMs);
-  let response: Response;
-  // Redirects by hand, so every hop's host is checked before it is requested.
-  for (let hop = 0; ; hop++) {
-    try {
-      response = await fetchImpl(url, {
-        signal,
-        redirect: "manual",
-        headers: {
-          accept: "text/html,application/xhtml+xml",
-          "user-agent": "Mozilla/5.0 (compatible; content-engine listing reader)",
-        },
-      });
-    } catch (error) {
-      const timedOut =
-        error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
-      throw new ListingFetchError(
-        timedOut
-          ? `The page did not answer within ${Math.round(timeoutMs / 1000)} seconds. Fill the form by hand instead.`
-          : "The page could not be reached. Fill the form by hand instead.",
-      );
-    }
-    const location = response.headers.get("location");
-    if (response.status < 300 || response.status >= 400 || !location) break;
-    if (hop >= MAX_REDIRECTS) throw new ListingFetchError("The page redirects too many times.");
-    url = checkListingUrl(new URL(location, url).toString());
-  }
-  if (!response.ok)
-    throw new ListingFetchError(
-      `The page answered ${response.status}. Fill the form by hand instead.`,
-    );
-  const type = response.headers.get("content-type") ?? "";
-  if (type && !/html|xml/i.test(type))
-    throw new ListingFetchError(`That is not a web page (${type.split(";")[0]}).`);
-  const declared = Number(response.headers.get("content-length") ?? 0);
-  if (declared > MAX_PAGE_BYTES)
-    throw new ListingFetchError("That page is too large to be a listing.");
-  const html = await response.text();
-  if (html.length > MAX_PAGE_BYTES)
-    throw new ListingFetchError("That page is too large to be a listing.");
-  return parseListingHtml(html, url.toString());
-}
+// Network reads live in listing-fetch.ts; this parser is also used by browser forms.
 
 /** Trim every field, keep only absolute http(s) images (deduped, capped) — for anything from a form. */
 export function normalizeListing(

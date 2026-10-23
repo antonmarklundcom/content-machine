@@ -4,8 +4,10 @@ import { authorizeClipToken, presentedClipToken } from "@/lib/clips/auth";
 import { isClipPurpose, normalizeTags, processYouTubeClip, saveClip } from "@/lib/clips/save";
 import { parseCaptureMessage } from "@/lib/clips/telegram";
 import { getSession } from "@/lib/auth/session";
-import { getBrand, listBrands } from "@/lib/bridge";
+import { getBrand, getClip, listBrands } from "@/lib/bridge";
 import type { ClipPurpose, ClipSource } from "@/db/schema";
+import { ClipWorkBusyError } from "@/lib/clips/work";
+import { LeaseLostError } from "@/lib/lease";
 
 /**
  * `POST /api/clips` — the capture endpoint (PLAN.md §5.O2.1).
@@ -105,7 +107,13 @@ export async function POST(request: Request): Promise<Response> {
     (presentedToken !== null || (await getSession())?.role === "owner") &&
     (await isAutomationAllowed("captureAnalysis"))
   ) {
-    clip = await processYouTubeClip(clip, { automatic: true });
+    try {
+      clip = await processYouTubeClip(clip, { automatic: true });
+    } catch (err) {
+      // Capture already succeeded; the attempt holding this clip will update it.
+      if (!(err instanceof ClipWorkBusyError) && !(err instanceof LeaseLostError)) throw err;
+      clip = (await getClip(clip.id)) ?? clip;
+    }
   }
 
   return NextResponse.json({ clip, created: saved.created }, { status: saved.created ? 201 : 200 });

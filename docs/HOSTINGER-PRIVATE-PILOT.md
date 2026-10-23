@@ -98,6 +98,45 @@ Telegram capture is optional: the existing Worker needs an allowlisted chat, web
 
 Text research lives in MariaDB. Your external-drive files are unavailable to Hostinger. Before uploading assets or using filesystem exports, configure and verify persistent hosted MEDIA_ROOT outside the deployment directory, or a reviewed storage adapter. Do not use .next or a disposable release folder for unique media.
 
+Run `npm run deployment:check -- --media` as the application user to verify that
+the explicitly configured directory exists, is readable/writable, and resolves
+outside the release tree. `--media-write` additionally creates, reads and removes
+one bounded synthetic probe; it never reads existing media. Repeat this check
+after a test redeployment and verify that a separate synthetic file survives.
+These checks establish filesystem placement/access only: the host's retention
+contract, capacity and independent backup/restore still need owner acceptance.
+
+Personal voice consents, references and training datasets stay outside the shared
+library. Include the entire `_private/` folder with media backups: its hash markers
+keep previously indexed originals/thumbnails private after a source is removed.
+Shared identities have separate markers in `_private/shared-identities/`;
+registration of an ordinary source checks its exact bytes and current private
+identities before creating one. Private classification always overrides shared.
+Legacy assets with no provenance remain hidden and cannot be uploaded or
+published, regardless of old status or brand. A scan of `_originals` alone never
+approves them. Keep all unknown originals while reviewing them.
+Shared post attachment reads withhold those assets, new attachments are refused,
+and the entire phone export pack returns a review-needed refusal if any retained
+attachment is private or unclassified. Existing cached public URLs do not bypass
+this check. Resolve or remove the restricted legacy attachment before exporting;
+do not approve private material merely to obtain a pack.
+
+First restore surviving **ordinary shared source files** from a matched backup
+and run `npm run media:scan`. If an ordinary source no longer exists, the owner
+must inspect that exact immutable file locally and verify intended team access
+and publication rights. Then, from the controlled local Content Machine
+workspace, explicitly approve that single SHA256 identity:
+
+```
+npx --no-install tsx scripts/review-media-identity.ts --sha256 <exact-64-hex-SHA256> --confirm-shared-review
+```
+
+This command changes only a local provenance marker; it does not upload, publish,
+or change database rows, and refuses known private identities. Do not approve
+unknown files in bulk. If privacy storage is unavailable, reconnect/restore its
+matched backup first: the library remains closed while classification cannot be
+proved. Recheck classification after restoring any private source backup.
+
 Pause automation before rollback and retain provider/job IDs. Use a matched code/schema/media/key backup. Older code can read an additive schema, but keep source references and do not drop the new columns/table casually. Research exported to Markdown is useful portability, not a database backup.
 
 ## Release verification

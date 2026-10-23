@@ -1,5 +1,6 @@
 import { getAsset } from "@/lib/bridge/assets";
 import { authoringOnly, notFound, serveMediaFile } from "@/lib/media/serve";
+import { isPrivateMediaFile } from "@/lib/media/privacy";
 
 /**
  * GET /api/media/asset/<id>/thumb — the asset's webp thumbnail (PLAN.md
@@ -14,5 +15,6 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
   if (!/^\d{1,9}$/.test(id)) return notFound();
   const asset = await getAsset(Number(id));
   if (!asset?.thumbPath) return notFound();
+  if (await isPrivateMediaFile(asset.thumbPath).catch(() => true)) return notFound();
   return serveMediaFile(request, asset.thumbPath, "image/webp");
 }

@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { postClientJson } from "@/lib/client-json";
 import { useTranslator } from "@/lib/i18n/client";
 import { translator, type Locale } from "@/lib/i18n";
 import { ResultMessage } from "./ResultMessage";
@@ -24,29 +25,39 @@ export function QuickAddClipForm({ locale }: { locale?: Locale } = {}) {
   const [learning, setLearning] = useState(true);
   const [pending, startTransition] = useTransition();
   const [result, setResult] = useState<{ tone: "success" | "error"; text: string } | null>(null);
+  const [expired, setExpired] = useState(false);
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
     startTransition(async () => {
       setResult(null);
-      const res = await fetch("/api/clips", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      setExpired(false);
+      try {
+        const response = await postClientJson("/api/clips", {
           url,
           note: note || undefined,
           purpose: learning ? "learn" : undefined,
-        }),
-      });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setResult({ tone: "error", text: body.error ?? `Request failed (${res.status})` });
-        return;
+        });
+        const clip = response.data.clip as { id?: unknown } | undefined;
+        if (!response.ok || !Number.isInteger(clip?.id) || Number(clip?.id) <= 0) {
+          setExpired(response.expired);
+          setResult({
+            tone: "error",
+            text: response.expired
+              ? t("capture.error.expired")
+              : typeof response.data.error === "string"
+                ? response.data.error
+                : t("capture.error.receipt"),
+          });
+          return;
+        }
+        setResult({ tone: "success", text: t("inbox.quickAdd.saved") });
+        setUrl("");
+        setNote("");
+        router.refresh();
+      } catch {
+        setResult({ tone: "error", text: t("capture.error.network") });
       }
-      setResult({ tone: "success", text: t("inbox.quickAdd.saved") });
-      setUrl("");
-      setNote("");
-      router.refresh();
     });
   }
 
@@ -90,6 +101,16 @@ export function QuickAddClipForm({ locale }: { locale?: Locale } = {}) {
         {pending ? t("inbox.quickAdd.saving") : t("inbox.quickAdd.submit")}
       </button>
       {result && <ResultMessage tone={result.tone}>{result.text}</ResultMessage>}
+      {expired && (
+        <a
+          href="/youtube/login"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-sm text-[var(--color-accent)] underline"
+        >
+          {t("capture.signInRetry")}
+        </a>
+      )}
     </form>
   );
 }

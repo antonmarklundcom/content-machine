@@ -6,6 +6,7 @@ import { db } from "@/db";
 import { users, type User } from "@/db/schema";
 import { ForbiddenError } from "./roles";
 import { createSessionToken, SESSION_COOKIE, SESSION_TTL_MS, verifySessionToken } from "./token";
+import { revokeSession, sessionRevoked } from "./revocation";
 
 /**
  * The session secret. Required — there is no development fallback on purpose:
@@ -37,6 +38,17 @@ export async function startSession(userId: number): Promise<void> {
 
 export async function endSession(): Promise<void> {
   const store = await cookies();
+  const token = store.get(SESSION_COOKIE)?.value;
+  const payload = await verifySessionToken(token, sessionSecret());
+  if (token && payload) {
+    try {
+      await revokeSession(token, payload.expiresAt);
+    } catch {
+      throw new Error(
+        "Sign-out could not be recorded. Your session is retained so you can retry safely.",
+      );
+    }
+  }
   store.delete(SESSION_COOKIE);
 }
 
@@ -49,8 +61,10 @@ export async function endSession(): Promise<void> {
  */
 export async function getSession(): Promise<User | null> {
   const store = await cookies();
-  const payload = await verifySessionToken(store.get(SESSION_COOKIE)?.value, sessionSecret());
+  const token = store.get(SESSION_COOKIE)?.value;
+  const payload = await verifySessionToken(token, sessionSecret());
   if (!payload) return null;
+  if (await sessionRevoked(token!)) return null;
 
   const [user] = await db.select().from(users).where(eq(users.id, payload.userId)).limit(1);
   return user ?? null;

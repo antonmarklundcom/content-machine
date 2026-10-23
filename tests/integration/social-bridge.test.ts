@@ -33,10 +33,13 @@ import {
 } from "@/lib/bridge";
 import { createFact } from "@/lib/bridge/facts";
 import { sampleCarouselDraft } from "@/lib/posts/fixture";
+import { approveSharedMediaIdentity } from "@/lib/media/privacy";
+import { configureSyntheticMediaRoot } from "./synthetic-media-root";
 
 import { resetTables, teardown } from "./setup";
 
 /** The build 3 bridge readers (PLAN.md §5.O9.6) over seeded and inserted rows. */
+configureSyntheticMediaRoot("social-bridge-fixture");
 
 beforeEach(async () => {
   await resetTables();
@@ -164,6 +167,8 @@ test("assets filter, dedupe by sha256 and report where they are used", async () 
       tags: ["visa"],
     },
   ]);
+  await approveSharedMediaIdentity(a.sha256);
+  await approveSharedMediaIdentity(b.sha256);
 
   assert.equal((await listAssets()).total, 2);
   assert.deepEqual(

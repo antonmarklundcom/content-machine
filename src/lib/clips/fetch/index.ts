@@ -9,6 +9,14 @@ import { transcribeClip, TRANSCRIBE_MAX_INLINE_BYTES, TranscribeRefusedError } f
 import { getAsset, getClip } from "@/lib/bridge";
 import { registerFile } from "@/lib/media/register";
 import { SpendCapExceededError } from "@/lib/spend";
+import {
+  assertLeaseCurrent,
+  LeaseLostError,
+  withLeaseCommit,
+  withRenewableLease,
+  type Lease,
+} from "@/lib/lease";
+import { clipWorkLease, CLIP_WORK_LEASE_TTL_MS, CLIP_WORK_BUSY_MESSAGE } from "../work";
 import { captureFolder } from "@/lib/storage/paths";
 import {
   mediaRoot,
@@ -42,6 +50,7 @@ export const AUTO_FETCH_PURPOSES: readonly ClipPurpose[] = ["fact_check", "compe
 export type FetchOutcome =
   | { status: "done"; clipId: number; assetId: number; costUsd: number; downloaded: boolean }
   | { status: "failed"; clipId: number; error: string; spendCap?: boolean }
+  | { status: "busy"; clipId: number; message: string }
   /** The drive is unplugged: nothing written to the clip, try again later. */
   | { status: "missing"; clipId: number; message: string };
 
@@ -52,9 +61,16 @@ export class ClipNotFoundError extends Error {
   }
 }
 
-async function fail(clipId: number, error: string, spendCap = false): Promise<FetchOutcome> {
+async function fail(
+  lease: Lease,
+  clipId: number,
+  error: string,
+  spendCap = false,
+): Promise<FetchOutcome> {
   const message = error.slice(0, 1024);
-  await db.update(clips).set({ error: message }).where(eq(clips.id, clipId));
+  await withLeaseCommit(lease, (tx) =>
+    tx.update(clips).set({ error: message }).where(eq(clips.id, clipId)),
+  );
   return { status: "failed", clipId, error: message, ...(spendCap ? { spendCap } : {}) };
 }
 
@@ -69,9 +85,38 @@ async function existingMedia(clip: Clip, root: string) {
 }
 
 /** Fetch (if needed) and transcribe one clip. Throws only for a missing clip. */
-export async function fetchClip(clipId: number): Promise<FetchOutcome> {
-  const clip = await getClip(clipId);
-  if (!clip) throw new ClipNotFoundError(clipId);
+export async function fetchClip(
+  clipId: number,
+  options: { force?: boolean } = {},
+): Promise<FetchOutcome> {
+  try {
+    const held = await withRenewableLease(
+      clipWorkLease(clipId),
+      CLIP_WORK_LEASE_TTL_MS,
+      async (lease) => {
+        const clip = await getClip(clipId);
+        if (!clip) throw new ClipNotFoundError(clipId);
+        try {
+          return await fetchHeldClip(clip, lease, options);
+        } catch (err) {
+          if (err instanceof LeaseLostError) throw err;
+          return fail(lease, clipId, `Clip fetch failed: ${(err as Error).message}`);
+        }
+      },
+    );
+    return held.acquired ? held.value : { status: "busy", clipId, message: CLIP_WORK_BUSY_MESSAGE };
+  } catch (err) {
+    if (err instanceof LeaseLostError) return { status: "failed", clipId, error: err.message };
+    throw err;
+  }
+}
+
+async function fetchHeldClip(
+  clip: Clip,
+  lease: Lease,
+  options: { force?: boolean },
+): Promise<FetchOutcome> {
+  const clipId = clip.id;
 
   const root = mediaRoot();
   const rootStatus = await mediaRootStatus(root);
@@ -80,33 +125,41 @@ export async function fetchClip(clipId: number): Promise<FetchOutcome> {
   }
 
   let media = await existingMedia(clip, root);
+  if (media && clip.fetchedAt && !options.force) {
+    return { status: "done", clipId, assetId: media.asset.id, costUsd: 0, downloaded: false };
+  }
   let downloaded = false;
-  let caption: string | null = null;
+  let caption: string | null = clip.postText;
+  const folder = `${captureFolder(clip.id)}/attempt-${lease.holder}`;
+  const dir = path.join(root, ...folder.split("/"));
 
   if (!media) {
-    const folder = captureFolder(clip.id);
-    const dir = path.join(root, ...folder.split("/"));
     try {
       await mkdir(dir, { recursive: true });
     } catch (err) {
-      return fail(clip.id, `Cannot write ${folder} on the media drive: ${(err as Error).message}`);
+      return fail(
+        lease,
+        clip.id,
+        `Cannot write ${folder} on the media drive: ${(err as Error).message}`,
+      );
     }
 
     let file: string;
     if (clip.telegramFileId) {
       const got = await downloadTelegramFile(clip.telegramFileId, dir);
-      if (!got.ok) return fail(clip.id, got.error);
+      if (!got.ok) return fail(lease, clip.id, got.error);
       file = got.file;
     } else {
       const got = await downloadWithYtDlp(clip.url, dir, {
         ffmpeg: await binaryAvailable("ffmpeg"),
       });
-      if (!got.ok) return fail(clip.id, got.error);
+      if (!got.ok) return fail(lease, clip.id, got.error);
       file = got.file;
-      caption = got.caption;
+      caption = got.caption ?? caption;
     }
     downloaded = true;
 
+    await assertLeaseCurrent(lease);
     const registered = await registerFile(file, {
       brandId: clip.brandId,
       source: clip.telegramFileId ? "telegram" : "capture",
@@ -117,36 +170,47 @@ export async function fetchClip(clipId: number): Promise<FetchOutcome> {
     if (registered.status === "missing") {
       return { status: "missing", clipId: clip.id, message: registered.message };
     }
-    if (registered.status === "rejected") return fail(clip.id, registered.message);
-    await db.update(clips).set({ mediaAssetId: registered.asset.id }).where(eq(clips.id, clip.id));
+    if (registered.status === "rejected") return fail(lease, clip.id, registered.message);
+    await withLeaseCommit(lease, (tx) =>
+      tx.update(clips).set({ mediaAssetId: registered.asset.id }).where(eq(clips.id, clip.id)),
+    );
     media = { asset: registered.asset, file };
   }
 
   const shrunk =
     media.asset.kind === "video" || media.asset.kind === "audio"
-      ? await shrinkForTranscript(media.file, TRANSCRIBE_MAX_INLINE_BYTES)
+      ? await shrinkForTranscript(media.file, TRANSCRIBE_MAX_INLINE_BYTES, dir)
       : { ok: true as const, file: media.file };
-  if (!shrunk.ok) return fail(clip.id, shrunk.error);
+  if (!shrunk.ok) return fail(lease, clip.id, shrunk.error);
 
   const context = [clip.note, caption].filter((s) => s?.trim()).join("\n") || null;
   try {
+    await assertLeaseCurrent(lease);
     const result = await transcribeClip({
       path: shrunk.file,
       mime: shrunk.file === media.file ? media.asset.mime : "video/mp4",
       durationSec: media.asset.durationSec,
       context,
     });
-    await db
-      .update(clips)
-      .set({
-        transcript: result.transcript,
-        postText: result.postText || caption,
-        summary: result.summary,
-        claims: result.claims,
-        fetchedAt: new Date(),
-        error: null,
-      })
-      .where(eq(clips.id, clip.id));
+    const postText = result.postText || caption;
+    const evidenceChanged = clip.transcript !== result.transcript || clip.postText !== postText;
+    await withLeaseCommit(lease, (tx) =>
+      tx
+        .update(clips)
+        .set({
+          transcript: result.transcript,
+          postText,
+          ...(clip.purpose === "learn"
+            ? evidenceChanged
+              ? { summary: null, learnCategory: null, howToStart: null, learnDetails: null }
+              : {}
+            : { summary: result.summary }),
+          claims: result.claims,
+          fetchedAt: new Date(),
+          error: null,
+        })
+        .where(eq(clips.id, clip.id)),
+    );
     return {
       status: "done",
       clipId: clip.id,
@@ -155,9 +219,10 @@ export async function fetchClip(clipId: number): Promise<FetchOutcome> {
       downloaded,
     };
   } catch (err) {
-    if (err instanceof SpendCapExceededError) return fail(clip.id, err.message, true);
-    if (err instanceof TranscribeRefusedError) return fail(clip.id, err.message);
-    return fail(clip.id, `Transcription failed: ${(err as Error).message}`);
+    if (err instanceof LeaseLostError) throw err;
+    if (err instanceof SpendCapExceededError) return fail(lease, clip.id, err.message, true);
+    if (err instanceof TranscribeRefusedError) return fail(lease, clip.id, err.message);
+    return fail(lease, clip.id, `Transcription failed: ${(err as Error).message}`);
   }
 }
 

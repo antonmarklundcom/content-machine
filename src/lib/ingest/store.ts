@@ -58,7 +58,7 @@ export async function upsertVideoFromMetadata(
         values.commentCount === null ? sql`${videos.commentCount}` : values.commentCount,
       thumbnailUrl: values.thumbnailUrl,
       // Only claim a video for a source if it does not already belong to one.
-      ...(sourceId !== null ? { sourceId } : {}),
+      ...(sourceId !== null ? { sourceId: sql`coalesce(${videos.sourceId}, ${sourceId})` } : {}),
     },
   });
 

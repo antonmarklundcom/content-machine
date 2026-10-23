@@ -16,6 +16,7 @@
     "scripts/**/*.ts",
     "test/**/*.ts",
     "../../src/lib/clips/url.ts",
+    "../../src/lib/clips/work.ts",
     "../../src/lib/clips/telegram.ts",
     "../../src/lib/learn/nudge.ts"
   ]

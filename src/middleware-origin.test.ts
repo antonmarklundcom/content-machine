@@ -31,11 +31,21 @@ const request = () =>
     },
   });
 
-test("CM-BUG-27: proxy login redirects to configured public origin", async () => {
+test("CM-BUG-27: private page redirects to configured public origin", async () => {
   process.env.APP_URL = "https://content.synthetic.invalid";
-  const response = await middleware(request());
+  const response = await middleware(
+    new NextRequest("http://0.0.0.0:51234/settings", { headers: request().headers }),
+  );
   assert.equal(response.status, 307);
   assert.equal(response.headers.get("location"), "https://content.synthetic.invalid/youtube/login");
+});
+
+test("expired private API returns JSON 401 without an HTML login redirect", async () => {
+  process.env.APP_URL = "https://content.synthetic.invalid";
+  const response = await middleware(request());
+  assert.equal(response.status, 401);
+  assert.equal(response.headers.get("location"), null);
+  assert.equal((await response.json()).reason, "session_required");
 });
 
 test("hosted origin missing or malformed fails closed before redirect", async () => {

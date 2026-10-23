@@ -114,8 +114,15 @@ try {
       `Standalone login form did not load without database credentials (status ${login.status}).`,
     );
   }
-  // Middleware redirects browser/private routes to login. Do not follow it
-  // and mistake the public login's 200 for a successful private-media response.
+  // Pages redirect to the canonical login; APIs return a machine-readable 401.
+  const privatePage = await fetch(`${base}/settings`, { redirect: "manual" });
+  if (
+    privatePage.status !== 307 ||
+    privatePage.headers.get("location") !== `${publicOrigin}/youtube/login`
+  )
+    throw new Error(
+      "Unauthenticated private pages must redirect to the configured canonical login.",
+    );
   const privateAsset = await fetch(`${base}/api/media/asset/1`, {
     redirect: "manual",
     headers: {
@@ -124,21 +131,18 @@ try {
       "x-forwarded-proto": "http",
     },
   });
-  const location = privateAsset.headers.get("location");
-  const redirectUrl = location === null ? null : new URL(location, base);
-  // A reverse-proxy request must use the configured public origin, never
-  // the bind host/internal port or arbitrary forwarded headers.
-  const loginRedirect =
-    privateAsset.status === 307 &&
-    redirectUrl !== null &&
-    redirectUrl.href === `${publicOrigin}/youtube/login`;
-  if (!loginRedirect) {
+  const denial = await privateAsset.json();
+  if (
+    privateAsset.status !== 401 ||
+    privateAsset.headers.has("location") ||
+    denial.reason !== "session_required"
+  ) {
     throw new Error(
-      `Unauthenticated hosted media must redirect to the configured public login; got ${privateAsset.status} (location ${location ?? "none"}).`,
+      `Unauthenticated hosted media must return JSON 401 without an HTML redirect; got ${privateAsset.status}.`,
     );
   }
   console.log(
-    "Validated standalone mysql2 closure, static asset serving, login form, and canonical public-origin private-media denial without DATABASE_URL.",
+    "Validated standalone mysql2 closure, static assets, login form, canonical page redirect and JSON private-media denial without DATABASE_URL.",
   );
 } finally {
   child.kill("SIGTERM");

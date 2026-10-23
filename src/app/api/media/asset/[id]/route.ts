@@ -19,14 +19,20 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
 
   const { id } = await context.params;
   if (!/^\d{1,9}$/.test(id)) return notFound();
-  const asset = await getAsset(Number(id));
-  if (!asset?.localPath) return notFound();
-  if (!splitRelative(asset.localPath)) return notFound();
   const drive = await mediaRootStatus();
   if (drive === "missing")
     return NextResponse.json({ error: mediaRootMessage(drive), code: "missing" }, { status: 503 });
+  const asset = await getAsset(Number(id));
+  if (!asset?.localPath) return notFound();
+  if (!splitRelative(asset.localPath)) return notFound();
   const original = await assetOriginal(asset).catch(() => null);
   if (!original)
-    return NextResponse.json({ error: "Original bytes changed or missing. Scan the library and restore/review this asset.", code: "identity_changed" }, { status: 409 });
+    return NextResponse.json(
+      {
+        error: "Original bytes changed or missing. Scan the library and restore/review this asset.",
+        code: "identity_changed",
+      },
+      { status: 409 },
+    );
   return serveMediaFile(request, original.rel, asset.mime);
 }

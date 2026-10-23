@@ -5,6 +5,9 @@ import { eq } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { insertReturning } from "@/db/mutations";
 import { saveLearnMaterialAction } from "@/lib/learn/material.actions";
+import { deleteLearnAction } from "@/lib/learn.actions";
+import { acquireLease, releaseLease } from "@/lib/lease";
+import { clipWorkLease } from "@/lib/clips/work";
 import { callRoute, signIn } from "./route";
 import { resetTables, teardown } from "./setup";
 
@@ -73,4 +76,26 @@ test("employee cannot alter source evidence; unchanged saves preserve the review
 test("invalid ids and oversized manual source material are refused", async () => {
   assert.equal((await run(owner, 0, "", "")).ok, false);
   assert.equal((await run(owner, await seed(), "x".repeat(100001), "")).ok, false);
+});
+
+test("source editing and deletion refuse a learning item held by another work attempt", async () => {
+  const id = await seed();
+  const lease = await acquireLease(clipWorkLease(id), 60_000);
+  assert.ok(lease);
+  try {
+    assert.equal((await run(owner, id, "Changed while busy", "")).ok, false);
+    let deletion: Awaited<ReturnType<typeof deleteLearnAction>> | undefined;
+    await callRoute(
+      async () => {
+        deletion = await deleteLearnAction(id);
+        return new Response(null);
+      },
+      new Request("http://localhost/learn", { method: "POST", headers: { cookie: owner } }),
+    );
+    assert.equal(deletion?.ok, false);
+    const [clip] = await db.select().from(schema.clips).where(eq(schema.clips.id, id));
+    assert.equal(clip.postText, "Old evidence");
+  } finally {
+    await releaseLease(lease);
+  }
 });

@@ -6,9 +6,9 @@
  * neither. A signed token also lets middleware decide on every request without
  * a database round trip, which matters on Hostinger's single MySQL user.
  *
- * The cost of statelessness is that a token cannot be revoked before it expires.
- * For a single-user private tool that is an acceptable trade; rotating
- * SESSION_SECRET invalidates every token at once, which is the escape hatch.
+ * Middleware verifies this signed envelope without a DB round trip. Private
+ * page/API session checks also consult the logout revocation ledger. Rotating
+ * SESSION_SECRET invalidates every token at once.
  *
  * Web Crypto, not node:crypto, because middleware runs on the edge runtime
  * where the node module does not exist.

@@ -19,6 +19,8 @@ import { saveMetaConnection } from "@/lib/meta/integration";
 import { postLeaseName, PUBLISH_LEASE, publishDue, publishPost } from "@/lib/publish";
 import { publishNowAction } from "@/lib/publish/actions";
 import { TEMPORARY_PREFIX } from "@/lib/publish/plan";
+import { approveSharedMediaIdentity } from "@/lib/media/privacy";
+import { configureSyntheticMediaRoot } from "./synthetic-media-root";
 
 import { callRoute, signIn } from "./route";
 import { resetTables, teardown } from "./setup";
@@ -133,6 +135,7 @@ let fb = 0;
 let integrationId = 0;
 let assetN = 0;
 let fixtureOwnerId = 0;
+configureSyntheticMediaRoot("publish-fixture");
 
 beforeEach(async () => {
   process.env.ENCRYPTION_KEY = generateEncryptionKey();
@@ -225,6 +228,7 @@ async function asset(
     status: "approved",
     altText: opts.altText ?? null,
   });
+  await approveSharedMediaIdentity(row.sha256);
   return row;
 }
 

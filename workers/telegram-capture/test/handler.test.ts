@@ -149,12 +149,23 @@ test("duplicate: the second save replies 'Already saved, note updated'", async (
   assert.equal(db.rows.get("https://youtu.be/abc")?.note, "second");
 });
 
-test("the SQL upsert only touches the note on an exact URL conflict", () => {
-  const onDuplicate = SAVE_SQL.slice(SAVE_SQL.indexOf("on duplicate key"));
-  assert.match(
-    onDuplicate,
-    /id = last_insert_id\(id\), note = if\(url = values\(url\), coalesce\(values\(note\), clips\.note\), clips\.note\)/i,
+test("a busy duplicate preserves a clear instruction to resend the note", async () => {
+  const query: Query = async (text) =>
+    text === SAVE_SQL ? [{ id: 7, created: false, busy: true }] : [{ id: "guide" }];
+  const res = await handleWebhook(
+    post(update({ text: "https://example.test/clip new note" })),
+    ENV,
+    query,
   );
+  assert.match(
+    await replyText(res),
+    /Already saved.*being processed.*send it again.*update its note/,
+  );
+});
+
+test("the initial SQL upsert never edits duplicate note context before claiming its lease", () => {
+  const onDuplicate = SAVE_SQL.slice(SAVE_SQL.indexOf("on duplicate key"));
+  assert.equal(onDuplicate, "on duplicate key update id = last_insert_id(id)");
   assert.match(SAVE_SQL, /'telegram'/);
   assert.doesNotMatch(SAVE_SQL, /on conflict|returning|::jsonb/i);
 });

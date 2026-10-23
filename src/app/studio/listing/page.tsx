@@ -47,6 +47,7 @@ export default async function ListingScriptPage({
             <p className="mt-3 text-sm text-[var(--color-warn)]">{t("listing.ownerOnly")}</p>
           )}
           <ListingForm
+            canGenerate={isOwner(user)}
             brands={brands.map((b) => ({
               id: b.id,
               name: b.name,
